@@ -2939,6 +2939,8 @@
             if (!projectId) { elementCheckboxes.innerHTML = '<p style="color: var(--muted); font-size: 13px; padding: 10px;">-- Seleccione proyecto primero --</p>'; partLabel.style.display = 'none'; return; }
             
             const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === projectId);
+            const currentValue = processSelect.value;
+            
             if (projectStages.length > 0) {
                 projectStages.sort((a, b) => {
                     const ea = state.etapasMaestras.find(e => e.id === a.etapaId);
@@ -2946,20 +2948,19 @@
                     return (ea?.orden || 0) - (eb?.orden || 0);
                 });
                 
-                const currentValue = processSelect.value;
                 processSelect.innerHTML = projectStages.map(pe => {
                     const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
                     if (!em || em.nombre === 'Preparación') return '';
                     return `<option value="${em.nombre}">${em.nombre}</option>`;
                 }).join('');
-                
-                if (processSelect.querySelector(`option[value="${currentValue}"]`)) {
-                    processSelect.value = currentValue;
-                } else if (processSelect.options.length > 0) {
-                    processSelect.value = processSelect.options[0].value;
-                }
             } else {
                 processSelect.innerHTML = '<option value="Armado">Armado (Conjuntos)</option><option value="Soldadura">Soldadura (Conjuntos)</option><option value="Terminación">Terminación (Conjuntos)</option>';
+            }
+
+            if (processSelect.querySelector(`option[value="${currentValue}"]`)) {
+                processSelect.value = currentValue;
+            } else if (processSelect.options.length > 0) {
+                processSelect.value = processSelect.options[0].value;
             }
 
             const process = processSelect.value;
