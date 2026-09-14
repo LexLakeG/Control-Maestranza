@@ -2949,14 +2949,17 @@
                 const currentValue = processSelect.value;
                 processSelect.innerHTML = projectStages.map(pe => {
                     const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                    if (!em || em.nombre === 'Preparación') return '';
                     return `<option value="${em.nombre}">${em.nombre}</option>`;
                 }).join('');
                 
                 if (processSelect.querySelector(`option[value="${currentValue}"]`)) {
                     processSelect.value = currentValue;
+                } else if (processSelect.options.length > 0) {
+                    processSelect.value = processSelect.options[0].value;
                 }
             } else {
-                processSelect.innerHTML = '<option value="Preparación">Preparación</option><option value="Armado">Armado (Conjuntos)</option><option value="Soldadura">Soldadura (Conjuntos)</option><option value="Terminación">Terminación (Conjuntos)</option>';
+                processSelect.innerHTML = '<option value="Armado">Armado (Conjuntos)</option><option value="Soldadura">Soldadura (Conjuntos)</option><option value="Terminación">Terminación (Conjuntos)</option>';
             }
 
             const process = processSelect.value;
