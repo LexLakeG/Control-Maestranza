@@ -1303,18 +1303,17 @@
         <!-- DASHBOARD -->
         <section id="dashboard" class="view active">
             <div class="kpi-grid">
-                <div class="kpi"><span>HH Totales</span><strong id="kpi-total-hh">0</strong><small>Acumulado
-                        periodo</small></div>
-                <div class="kpi danger"><span>HH Retrabajo</span><strong id="kpi-rework-hh">0</strong><small>Costo de no
-                        calidad</small></div>
-                <div class="kpi"><span>Proyectos Activos</span><strong id="kpi-active-projects">0</strong><small>En
+                <div class="kpi" style="cursor:pointer; transition: opacity 0.2s;" onclick="setDashboardFilter('all')" id="kpi-card-all"><span>HH Totales</span><strong id="kpi-total-hh">0</strong><small>Ver Todos los Proyectos</small></div>
+                <div class="kpi danger" style="cursor:pointer; transition: opacity 0.2s;" onclick="setDashboardFilter('rework')" id="kpi-card-rework"><span>HH Retrabajo</span><strong id="kpi-rework-hh">0</strong><small>Proyectos con Retrabajo</small></div>
+                <div class="kpi" style="cursor:pointer; transition: opacity 0.2s;" onclick="setDashboardFilter('active')" id="kpi-card-active"><span>Proyectos Activos</span><strong id="kpi-active-projects">0</strong><small>En
                         ejecución</small></div>
-                <div class="kpi"><span>Elementos Terminados</span><strong
+                <div class="kpi" style="cursor:pointer; transition: opacity 0.2s;" onclick="setDashboardFilter('finished')" id="kpi-card-finished"><span>Proyectos Terminados</span><strong
                         id="kpi-finished-elements">0</strong><small>Global</small></div>
             </div>
             <div class="panel">
-                <div class="panel-head">
-                    <h2>Estado de Proyectos Vigentes</h2>
+                <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>Estado de Proyectos</h2>
+                    <input type="text" id="dashboard-projects-filter" placeholder="🔍 Filtrar proyectos (OT o Nombre)..." oninput="renderDashboard()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); width: 250px;">
                 </div>
                 <div id="dashboard-projects-list"></div>
             </div>
@@ -1333,9 +1332,15 @@
                         <label>Nombre Proyecto <input type="text" name="projectName" placeholder="Ej: Estructura Nave B"
                                 required></label>
                         <label>Cliente <input type="text" name="clientName" placeholder="Nombre del cliente"></label>
-                        <label>HH Estimadas <input type="number" name="estimatedHh" min="0" step="0.1" required></label>
+                        <label>HH/Ton Presupuestadas <input type="number" name="budgetedHhTon" min="0" step="0.1" required></label>
                         <label>Fecha Inicio <input type="date" name="startDate"></label>
                         <label>Fecha Compromiso <input type="date" name="deadline"></label>
+                        <div class="wide" style="margin: 10px 0;">
+                            <label>Etapas del Proyecto:</label>
+                            <div id="project-stages-checkboxes" class="checkbox-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 200px; padding: 10px;">
+                                <!-- Checkboxes generados dinámicamente -->
+                            </div>
+                        </div>
                         <button type="submit" class="primary wide">Crear Proyecto</button>
                     </form>
                     <h3>Proyectos Existentes</h3>
@@ -1383,19 +1388,7 @@
                     </div>
                 </div>
             </div>
-            <div class="panel" style="margin-top: 16px; display: none;" id="project-advance-panel">
-                <div class="panel-head">
-                    <h2>Avance Ponderado del Proyecto Activo</h2><span>35/25/25/15</span>
-                </div>
-                <div id="project-dual-progress-container"></div>
-            </div>
-            <div class="panel" style="margin-top: 16px; display: none;" id="project-chart-panel">
-                <div class="panel-head">
-                    <h2>Proyección de Término</h2>
-                    <div id="projection-info" style="font-size: 13px; color: var(--muted);"></div>
-                </div>
-                <div style="position: relative; height: 400px;"><canvas id="project-chart"></canvas></div>
-            </div>
+
         </section>
 
         <!-- TAREAS -->
@@ -1723,6 +1716,41 @@
         </div>
     </div>
 
+    <!-- MODAL EDITAR PROYECTO -->
+    <div id="edit-project-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header">
+                <h2 style="margin:0;">✏️ Editar Proyecto</h2>
+                <button class="close-modal" onclick="closeEditProjectModal()">×</button>
+            </div>
+            <form id="edit-project-form" class="form-grid" style="margin-top:12px;">
+                <input type="hidden" id="edit-proj-id">
+                <label>Código OT
+                    <input type="text" id="edit-proj-ot" required>
+                </label>
+                <label>Nombre Proyecto
+                    <input type="text" id="edit-proj-name" required>
+                </label>
+                <label>Cliente
+                    <input type="text" id="edit-proj-client">
+                </label>
+                <label>HH/Ton Presupuestadas
+                    <input type="number" id="edit-proj-hh-ton" step="0.1" min="0" required>
+                </label>
+                <label>Fecha Inicio
+                    <input type="date" id="edit-proj-start">
+                </label>
+                <label>Fecha Compromiso
+                    <input type="date" id="edit-proj-deadline">
+                </label>
+                <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                    <button type="button" class="warn-btn" onclick="closeEditProjectModal()">Cancelar</button>
+                    <button type="submit" class="primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL EDITAR ELEMENTO -->
     <div id="edit-element-modal" class="modal-overlay">
         <div class="modal-content" style="max-width:550px;">
@@ -1875,13 +1903,15 @@
         // 🔄  NORMALIZADORES  (DB snake_case → App camelCase)
         // ════════════════════════════════════════════════════════
         const norm = {
-            project: p => ({ id: p.id, otCode: p.ot_code, projectName: p.project_name, clientName: p.client_name || '', estimatedHh: parseFloat(p.estimated_hh) || 0, startDate: p.start_date || '', deadline: p.deadline || '', csvVersion: p.csv_version || 0 }),
+            project: p => ({ id: p.id, otCode: p.ot_code, projectName: p.project_name, clientName: p.client_name || '', estimatedHh: parseFloat(p.estimated_hh) || 0, budgetedHhTon: parseFloat(p.budgeted_hh_ton) || null, startDate: p.start_date || '', deadline: p.deadline || '', csvVersion: p.csv_version || 0, createdAt: p.created_at || new Date().toISOString() }),
             worker: w => ({ id: w.id, rrhhCode: w.rrhh_code, name: w.name, role: w.role, active: w.active }),
             element: e => ({ id: e.id, projectId: e.project_id, mark: e.mark, quantity: e.quantity, unit_weight_kg: parseFloat(e.unit_weight_kg) || 0, total_weight_kg: parseFloat(e.total_weight_kg) || 0, status: e.status || 'Pendiente' }),
             part: p => ({ id: p.id, projectId: p.project_id, elementId: p.element_id, partCode: p.part_code, profile: p.profile || '', qtyPerElement: p.qty_per_element, totalQty: p.total_qty, length_mm: p.length_mm, area_m2: p.area_m2, unit_weight_kg: parseFloat(p.unit_weight_kg) || 0, total_weight_kg: parseFloat(p.total_weight_kg) || 0 }),
             task: t => ({ id: t.id, projectId: t.project_id, code: t.code, process: t.process, elementId: t.element_id, partId: t.part_id, quantity: t.quantity, status: t.status, instructions: t.instructions || '', csvVersion: t.csv_version || 0, csvWarning: t.csv_warning || false, isRework: t.is_rework || false, linkedInspectionId: t.linked_inspection_id, createdAt: t.created_at, workerIds: (t.task_workers || []).map(tw => tw.worker_id) }),
             timeEntry: te => ({ id: te.id, taskId: te.task_id, workerId: te.worker_id, projectId: te.project_id, work_date: te.work_date, hh: parseFloat(te.hh), is_rework: te.is_rework || false, validated: te.validated }),
             inspection: i => ({ id: i.id, projectId: i.project_id, elementId: i.element_id, type: i.type, result: i.result, observation: i.observation || '', quantity: i.quantity || 1, date: i.date }),
+            etapaMaestra: em => ({ id: em.id, nombre: em.nombre, orden: em.orden, colorCss: em.color_css }),
+            proyectoEtapa: pe => ({ id: pe.id, projectId: pe.project_id, etapaId: pe.etapa_id, estado: pe.estado, progresoPorcentaje: pe.progreso_porcentaje, peso: parseFloat(pe.peso) || 25 }),
         };
 
         // ════════════════════════════════════════════════════════
@@ -1896,6 +1926,8 @@
                 { data: tasks, error: e5 },
                 { data: timeEntries, error: e6 },
                 { data: inspections, error: e7 },
+                { data: etapasMaestras, error: e8 },
+                { data: proyectoEtapas, error: e9 },
             ] = await Promise.all([
                 db.from('projects').select('*').order('created_at'),
                 db.from('workers').select('*').order('created_at'),
@@ -1904,8 +1936,10 @@
                 db.from('tasks').select('*, task_workers(worker_id)').order('created_at'),
                 db.from('time_entries').select('*').order('created_at'),
                 db.from('inspections').select('*').order('created_at'),
+                db.from('etapas_maestras').select('*').order('orden'),
+                db.from('proyecto_etapas').select('*'),
             ]);
-            const errors = [e1, e2, e3, e4, e5, e6, e7].filter(Boolean);
+            const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9].filter(Boolean);
             if (errors.length) { console.error('Supabase load errors:', errors); }
             return {
                 projects: (projects || []).map(norm.project),
@@ -1915,6 +1949,8 @@
                 tasks: (tasks || []).map(norm.task),
                 timeEntries: (timeEntries || []).map(norm.timeEntry),
                 inspections: (inspections || []).map(norm.inspection),
+                etapasMaestras: (etapasMaestras || []).map(norm.etapaMaestra),
+                proyectoEtapas: (proyectoEtapas || []).map(norm.proyectoEtapa),
             };
         }
 
@@ -1926,9 +1962,36 @@
         // ════════════════════════════════════════════════════════
 
         // --- Proyectos ---
-        async function dbInsertProject(p) {
-            const { data, error } = await db.from('projects').insert({ id: p.id, ot_code: p.otCode, project_name: p.projectName, client_name: p.clientName, estimated_hh: p.estimatedHh, start_date: p.startDate || null, deadline: p.deadline || null, csv_version: 0 }).select().single();
+        async function dbUpdateProject(id, data) {
+            const payload = {
+                ot_code: data.otCode,
+                project_name: data.projectName,
+                client_name: data.clientName,
+                budgeted_hh_ton: data.budgetedHhTon,
+                start_date: data.startDate || null,
+                deadline: data.deadline || null
+            };
+            
+            const { error } = await db.from('projects').update(payload).eq('id', id);
+            if (error) { throw error; }
+        }
+
+        async function dbInsertProject(p, selectedStages) {
+            const { data, error } = await db.from('projects').insert({ id: p.id, ot_code: p.otCode, project_name: p.projectName, client_name: p.clientName, estimated_hh: p.estimatedHh, budgeted_hh_ton: p.budgetedHhTon, start_date: p.startDate || null, deadline: p.deadline || null, csv_version: 0 }).select().single();
             if (error) { alert('Error al crear proyecto: ' + error.message); throw error; }
+            
+            if (selectedStages && selectedStages.length > 0) {
+                const inserts = selectedStages.map(stage => ({
+                    project_id: data.id,
+                    etapa_id: stage.id,
+                    peso: stage.peso
+                }));
+                const { data: peData, error: peError } = await db.from('proyecto_etapas').insert(inserts).select();
+                if (peError) { console.error('Error insertando etapas del proyecto:', peError); }
+                else if (peData) {
+                    peData.forEach(pe => state.proyectoEtapas.push(norm.proyectoEtapa(pe)));
+                }
+            }
             return norm.project(data);
         }
         async function dbDeleteProject(id) {
@@ -2333,15 +2396,60 @@
         // ════════════════════════════════════════════════════════
         // 📁  GESTIÓN DE PROYECTOS
         // ════════════════════════════════════════════════════════
+        document.getElementById("edit-project-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            if (!canDelete()) { alert('⚠️ Solo el rol Admin puede editar proyectos.'); return; }
+            
+            const id = document.getElementById('edit-proj-id').value;
+            const updates = {
+                otCode: document.getElementById('edit-proj-ot').value.trim(),
+                projectName: document.getElementById('edit-proj-name').value.trim(),
+                clientName: document.getElementById('edit-proj-client').value.trim(),
+                budgetedHhTon: parseFloat(document.getElementById('edit-proj-hh-ton').value) || 0,
+                startDate: document.getElementById('edit-proj-start').value || null,
+                deadline: document.getElementById('edit-proj-deadline').value || null
+            };
+            
+            try {
+                await dbUpdateProject(id, updates);
+                const pIndex = state.projects.findIndex(p => p.id === id);
+                if(pIndex > -1) {
+                    state.projects[pIndex] = { ...state.projects[pIndex], ...updates };
+                }
+                closeEditProjectModal();
+                renderAll();
+            } catch (err) {
+                console.error(err);
+                alert('Error al actualizar el proyecto.');
+            }
+        });
+
         document.getElementById("new-project-form").addEventListener("submit", async (e) => {
             e.preventDefault();
             const formEl = e.currentTarget;
             const form = new FormData(formEl);
             const otCode = form.get("otCode").trim();
             if (state.projects.some(p => p.otCode === otCode)) { alert(`Ya existe un proyecto con la OT ${otCode}.`); return; }
-            const newProject = { id: crypto.randomUUID(), otCode, projectName: form.get("projectName").trim(), clientName: form.get("clientName").trim(), estimatedHh: parseFloat(form.get("estimatedHh")) || 0, startDate: form.get("startDate"), deadline: form.get("deadline"), csvVersion: 0 };
+            
+            // Collect selected stages and their weights
+            const selectedStages = [];
+            let totalWeight = 0;
+            formEl.querySelectorAll('input[name="stages"]:checked').forEach(cb => {
+                const weightInput = formEl.querySelector(`input[name="weight_${cb.value}"]`);
+                const weight = parseFloat(weightInput.value) || 0;
+                totalWeight += weight;
+                selectedStages.push({ id: cb.value, peso: weight });
+            });
+
+            if (selectedStages.length > 0 && totalWeight !== 100) {
+                alert(`La suma de los porcentajes de las etapas debe ser exactamente 100%. Actualmente suma ${totalWeight}%.`);
+                return;
+            }
+
+            const newProject = { id: crypto.randomUUID(), otCode, projectName: form.get("projectName").trim(), clientName: form.get("clientName").trim(), budgetedHhTon: parseFloat(form.get("budgetedHhTon")) || 0, estimatedHh: 0, startDate: form.get("startDate"), deadline: form.get("deadline"), csvVersion: 0 };
+            
             try {
-                const saved = await dbInsertProject(newProject);
+                const saved = await dbInsertProject(newProject, selectedStages);
                 state.projects.push(saved);
                 formEl.reset(); currentProjectId = saved.id; renderAll();
             } catch (err) { /* manejado en dbInsertProject */ }
@@ -2429,6 +2537,23 @@
 
         // ── Editar elemento ───────────────────────────────────────
         let _editingElementId = null;
+        window.openEditProjectModal = (projectId) => {
+            const p = state.projects.find(x => x.id === projectId);
+            if(!p) return;
+            document.getElementById('edit-proj-id').value = p.id;
+            document.getElementById('edit-proj-ot').value = p.otCode;
+            document.getElementById('edit-proj-name').value = p.projectName;
+            document.getElementById('edit-proj-client').value = p.clientName || '';
+            document.getElementById('edit-proj-hh-ton').value = p.budgetedHhTon || 0;
+            document.getElementById('edit-proj-start').value = p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : '';
+            document.getElementById('edit-proj-deadline').value = p.deadline ? new Date(p.deadline).toISOString().split('T')[0] : '';
+            document.getElementById('edit-project-modal').style.display = 'flex';
+        };
+
+        window.closeEditProjectModal = () => {
+            document.getElementById('edit-project-modal').style.display = 'none';
+        };
+
         window.openEditElement = (elementId) => {
             const el = state.elements.find(e => e.id === elementId);
             if (!el) return;
@@ -2811,22 +2936,51 @@
 
         function updateTaskFormContext() {
             const projectId = document.getElementById('task-project-select').value;
-            const process = processSelect.value;
             if (!projectId) { elementCheckboxes.innerHTML = '<p style="color: var(--muted); font-size: 13px; padding: 10px;">-- Seleccione proyecto primero --</p>'; partLabel.style.display = 'none'; return; }
+            
+            const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === projectId);
+            if (projectStages.length > 0) {
+                projectStages.sort((a, b) => {
+                    const ea = state.etapasMaestras.find(e => e.id === a.etapaId);
+                    const eb = state.etapasMaestras.find(e => e.id === b.etapaId);
+                    return (ea?.orden || 0) - (eb?.orden || 0);
+                });
+                
+                const currentValue = processSelect.value;
+                processSelect.innerHTML = projectStages.map(pe => {
+                    const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                    return `<option value="${em.nombre}">${em.nombre}</option>`;
+                }).join('');
+                
+                if (processSelect.querySelector(`option[value="${currentValue}"]`)) {
+                    processSelect.value = currentValue;
+                }
+            } else {
+                processSelect.innerHTML = '<option value="Preparación">Preparación</option><option value="Armado">Armado (Conjuntos)</option><option value="Soldadura">Soldadura (Conjuntos)</option><option value="Terminación">Terminación (Conjuntos)</option>';
+            }
+
+            const process = processSelect.value;
             const pElements = state.elements.filter(e => e.projectId === projectId);
-            const processOrder = ['Preparación', 'Armado', 'Soldadura', 'Terminación'];
+            const processOrder = Array.from(processSelect.options).map(o => o.value);
             const currentProcessIndex = processOrder.indexOf(process);
+            
             elementCheckboxes.innerHTML = pElements.map(e => {
                 let available = 0, isBlocked = false, blockReason = '';
-                if (process === 'Preparación') { const assigned = state.tasks.filter(t => t.elementId === e.id && t.process === 'Preparación' && (t.status === 'Activa' || t.status === 'Terminada')).reduce((sum, t) => sum + t.quantity, 0); available = e.quantity - assigned; }
-                else {
+                if (currentProcessIndex === 0) {
+                    const assigned = state.tasks.filter(t => t.elementId === e.id && t.process === process && (t.status === 'Activa' || t.status === 'Terminada')).reduce((sum, t) => sum + t.quantity, 0); 
+                    available = e.quantity - assigned; 
+                } else {
                     const prevProc = processOrder[currentProcessIndex - 1];
-                    if (prevProc === 'Preparación') { const ac = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); const cc = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); available = e.quantity - ac - cc; }
-                    else { const cp = state.tasks.filter(t => t.elementId === e.id && t.process === prevProc && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); const ac = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); const cc = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); available = cp - ac - cc; if (cp === 0) { isBlocked = true; blockReason = `Debe completar ${prevProc} primero`; } }
+                    const cp = state.tasks.filter(t => t.elementId === e.id && t.process === prevProc && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); 
+                    const ac = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); 
+                    const cc = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); 
+                    available = cp - ac - cc; 
+                    if (cp === 0) { isBlocked = true; blockReason = `Debe completar ${prevProc} primero`; } 
                 }
                 const disabledAttr = (available <= 0 || isBlocked) ? 'disabled' : ''; const textStyle = (available <= 0 || isBlocked) ? 'color:var(--muted);text-decoration:line-through;' : ''; const displayText = isBlocked ? `${e.mark} (${blockReason})` : `${e.mark} (Disp: ${available}/${e.quantity})`;
                 return `<label class="checkbox-item" style="${textStyle}"><input type="checkbox" name="elements" value="${e.id}" ${disabledAttr} class="task-element-cb">${displayText}</label>`;
             }).join('') || '<p style="color:var(--muted);font-size:13px;padding:10px;">No hay conjuntos cargados.</p>';
+            
             document.querySelectorAll('.task-element-cb').forEach(cb => cb.addEventListener('change', updatePartsAndQtyContext));
             updatePartsAndQtyContext();
         }
@@ -2836,11 +2990,13 @@
         function updatePartsAndQtyContext() {
             const process = processSelect.value;
             const checkedElIds = Array.from(document.querySelectorAll('.task-element-cb:checked')).map(cb => cb.value);
-            if (process === 'Preparación') {
+            const isPartsProcess = process === 'Preparación' || process === 'Corte' || process === 'Plegado' || process === 'Corte CNC' || process === 'Cilindrado';
+            
+            if (isPartsProcess) {
                 partLabel.style.display = 'grid';
                 if (!checkedElIds.length) { partCheckboxes.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:10px;">Selecciona conjuntos.</p>'; qtyInput.disabled = true; qtyInput.value = ""; qtyInput.required = false; qtyHint.textContent = ""; return; }
                 const pParts = state.parts.filter(p => checkedElIds.includes(p.elementId));
-                partCheckboxes.innerHTML = pParts.map(p => { const el = state.elements.find(e => e.id === p.elementId); const available = p.totalQty - state.tasks.filter(t => t.partId === p.id && t.process === 'Preparación' && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); const disabled = available <= 0 ? 'disabled' : ''; const ts = available <= 0 ? 'color:var(--muted);text-decoration:line-through;' : ''; return `<label class="checkbox-item" style="${ts}"><input type="checkbox" name="parts" value="${p.id}" ${disabled} class="task-part-cb"><strong>${p.partCode}</strong> (${p.profile}) [${el.mark}] (Disp: ${available}/${p.totalQty})</label>`; }).join('');
+                partCheckboxes.innerHTML = pParts.map(p => { const el = state.elements.find(e => e.id === p.elementId); const available = p.totalQty - state.tasks.filter(t => t.partId === p.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); const disabled = available <= 0 ? 'disabled' : ''; const ts = available <= 0 ? 'color:var(--muted);text-decoration:line-through;' : ''; return `<label class="checkbox-item" style="${ts}"><input type="checkbox" name="parts" value="${p.id}" ${disabled} class="task-part-cb"><strong>${p.partCode}</strong> (${p.profile}) [${el.mark}] (Disp: ${available}/${p.totalQty})</label>`; }).join('');
                 document.querySelectorAll('.task-part-cb').forEach(cb => cb.addEventListener('change', updateQtyInputStatusForParts));
                 updateQtyInputStatusForParts();
             } else {
@@ -2851,9 +3007,10 @@
             }
         }
         function updateQtyInputStatusForParts() {
+            const process = processSelect.value;
             const checkedPartIds = Array.from(document.querySelectorAll('.task-part-cb:checked')).map(cb => cb.value);
             if (!checkedPartIds.length) { qtyInput.disabled = true; qtyInput.value = ""; qtyInput.required = false; qtyHint.textContent = "Selecciona al menos una parte."; }
-            else if (checkedPartIds.length === 1) { qtyInput.disabled = false; qtyInput.required = true; const part = state.parts.find(p => p.id === checkedPartIds[0]); const available = part.totalQty - state.tasks.filter(t => t.partId === part.id && t.process === 'Preparación' && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); qtyInput.value = available; qtyInput.max = available; qtyHint.textContent = `Máximo disponible: ${available} piezas.`; }
+            else if (checkedPartIds.length === 1) { qtyInput.disabled = false; qtyInput.required = true; const part = state.parts.find(p => p.id === checkedPartIds[0]); const available = part.totalQty - state.tasks.filter(t => t.partId === part.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); qtyInput.value = available; qtyInput.max = available; qtyHint.textContent = `Máximo disponible: ${available} piezas.`; }
             else { qtyInput.disabled = true; qtyInput.required = false; qtyInput.value = ""; qtyHint.textContent = `Selección múltiple (${checkedPartIds.length} partes): Se asignará el total disponible.`; }
         }
 
@@ -3464,28 +3621,47 @@
         function calculateProjectProgress(projectId) {
             const pElements = state.elements.filter(e => e.projectId === projectId);
             const totalQty = pElements.reduce((s, e) => s + e.quantity, 0);
+            const totalKg = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
             if (totalQty === 0) return 0;
-
-            // Preparación (35%) - Basado en la cantidad total de partes
-            const pParts = state.parts.filter(p => p.projectId === projectId);
-            const totalPartsQty = pParts.reduce((s, p) => s + p.totalQty, 0);
-            const prepClosedQty = state.tasks.filter(t => t.projectId === projectId && t.process === 'Preparación' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-            const prepPct = totalPartsQty > 0 ? (prepClosedQty / totalPartsQty) * 100 : 0;
-
-            // Armado (25%) - Basado en conjunto
-            const armadoClosedQty = state.tasks.filter(t => t.projectId === projectId && t.process === 'Armado' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-            const armadoPct = (armadoClosedQty / totalQty) * 100;
-
-            // Soldadura (25%) - Basado en conjunto
-            const soldClosedQty = state.tasks.filter(t => t.projectId === projectId && t.process === 'Soldadura' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-            const soldPct = (soldClosedQty / totalQty) * 100;
-
-            // Terminación (15%) - Basado en conjunto
-            const termClosedQty = state.tasks.filter(t => t.projectId === projectId && t.process === 'Terminación' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-            const termPct = (termClosedQty / totalQty) * 100;
-
-            const overall = (prepPct * 0.35) + (armadoPct * 0.25) + (soldPct * 0.25) + (termPct * 0.15);
-            return Math.min(100, Math.round(overall));
+            
+            const pTasks = state.tasks.filter(t => t.projectId === projectId && t.status === 'Terminada' && !t.isRework);
+            
+            const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === projectId);
+            let stages = [];
+            
+            if (projectStages.length > 0) {
+                stages = projectStages.map(pe => {
+                    const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                    return {
+                        name: em.nombre,
+                        weight: (pe.peso || 25) / 100
+                    };
+                });
+            } else {
+                stages = [
+                    { name: 'Preparación', weight: 0.35 },
+                    { name: 'Armado', weight: 0.25 },
+                    { name: 'Soldadura', weight: 0.25 },
+                    { name: 'Terminación', weight: 0.15 }
+                ];
+            }
+            
+            let weightedAdvance = 0;
+            stages.forEach(st => {
+                const stageTasks = pTasks.filter(t => t.process === st.name);
+                let stageKg = 0;
+                
+                if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
+                    stageKg = stageTasks.reduce((s, t) => { const part = state.parts.find(pa => pa.id === t.partId); return s + (part ? part.unit_weight_kg * t.quantity : 0); }, 0);
+                } else {
+                    stageKg = stageTasks.reduce((s, t) => { const el = pElements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
+                }
+                
+                const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
+                weightedAdvance += stagePct * st.weight;
+            });
+            
+            return Math.min(100, Math.round(weightedAdvance));
         }
 
         function calculateProjectProgressAtDate(projectId, date) {
@@ -3515,15 +3691,178 @@
         // ════════════════════════════════════════════════════════
         // 🎨  RENDERIZADO (lee del estado local en caché)
         // ════════════════════════════════════════════════════════
-        function renderAll() { renderDashboard(); renderProjects(); renderTasks(); renderHours(); renderQualityForms(); renderReports(); renderSettings(); applyRoleUI(); }
+        function renderAll() { renderStageCheckboxes(); renderDashboard(); renderProjects(); renderTasks(); renderHours(); renderQualityForms(); renderReports(); renderSettings(); applyRoleUI(); }
+
+        function renderStageCheckboxes() {
+            const container = document.getElementById('project-stages-checkboxes');
+            if (!container) return;
+            if (state.etapasMaestras && state.etapasMaestras.length > 0) {
+                container.innerHTML = state.etapasMaestras.map(etapa => `
+                    <label style="cursor:pointer; display:flex; align-items:center; gap:6px; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="checkbox" name="stages" value="${etapa.id}" class="stage-cb" onchange="this.parentElement.nextElementSibling.disabled = !this.checked">
+                            <span>${etapa.nombre}</span>
+                        </div>
+                        <input type="number" name="weight_${etapa.id}" min="1" max="100" placeholder="%" style="width: 70px; padding: 2px 4px;" disabled required>
+                    </label>
+                `).join('');
+            } else {
+                container.innerHTML = '<span style="color:var(--muted); font-size:12px;">No hay etapas maestras en la BD.</span>';
+            }
+        }
+
+        function renderProjects() {
+            const container = document.getElementById("projects-list-container");
+            if (!container) return;
+            if (state.projects.length === 0) {
+                container.innerHTML = '<div style="padding: 10px; color: var(--muted); text-align: center;">No hay proyectos.</div>';
+            } else {
+                // Sort from newest to oldest
+                const sortedProjects = [...state.projects].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                
+                container.innerHTML = sortedProjects.map(p => `
+                    <div class="project-list-item ${typeof currentProjectId !== 'undefined' && currentProjectId === p.id ? 'active' : ''}" onclick="selectProject('${p.id}')" style="padding: 10px; border-bottom: 1px solid var(--line); cursor: pointer; background: ${typeof currentProjectId !== 'undefined' && currentProjectId === p.id ? 'rgba(34,197,94,0.1)' : 'transparent'};">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div style="font-weight: 500;">OT ${p.otCode} - ${p.projectName}</div>
+                            <div style="display:flex; gap:4px;">
+                                ${typeof canDelete === 'function' && canDelete() ? `<button onclick="event.stopPropagation();openEditProjectModal('${p.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''}
+                                ${typeof canDelete === 'function' && canDelete() ? `<button onclick="event.stopPropagation();deleteProject('${p.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">👤 ${p.clientName || 'Sin cliente'}</div>
+                    </div>
+                `).join('');
+            }
+
+            const project = state.projects.find(p => p.id === currentProjectId);
+            const csvSection = document.getElementById("csv-upload-section");
+            const noProject = document.getElementById("no-project-selected");
+            const elementsSection = document.getElementById("elements-section");
+            const elementsTable = document.getElementById("elements-table");
+            const elementsFoot = document.getElementById("elements-foot");
+
+            if (project) {
+                document.getElementById("active-project-name").textContent = `OT ${project.otCode} - ${project.projectName}`;
+                if(csvSection) csvSection.style.display = 'block';
+                if(noProject) noProject.style.display = 'none';
+                if(elementsSection) elementsSection.style.display = 'block';
+                
+                const pElements = state.elements.filter(e => e.projectId === currentProjectId);
+                const elCount = document.getElementById("elements-count");
+                if (elCount) elCount.textContent = `${pElements.length} marcas`;
+                
+                const sumQty = pElements.reduce((s, e) => s + e.quantity, 0);
+                const sumKgTotal = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
+                
+                if (elementsTable) {
+                    elementsTable.innerHTML = pElements.map(e => {
+                        const procStatus = typeof computeElementStatus === 'function' ? computeElementStatus(e.id) : 'Pendiente';
+                        const badgeHtml = typeof elementStatusBadge === 'function' ? elementStatusBadge(procStatus) : procStatus;
+                        return `<tr>
+                        <td><strong>${e.mark}</strong></td>
+                        <td>${e.quantity}</td>
+                        <td>${e.unit_weight_kg.toFixed(1)}</td>
+                        <td>${e.total_weight_kg.toFixed(1)}</td>
+                        <td>${badgeHtml}</td>
+                        <td style="display:flex;gap:4px;">
+                            ${typeof isReadOnly === 'function' && !isReadOnly() ? `<button onclick="openEditElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''}
+                            ${typeof canDelete === 'function' && canDelete() ? `<button onclick="deleteElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
+                        </td>
+                        </tr>`;
+                    }).join('');
+                }
+                
+                if (elementsFoot) {
+                    elementsFoot.innerHTML = pElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td>${sumQty}</td><td>—</td><td>${sumKgTotal.toFixed(1)}</td><td></td><td></td></tr>` : '';
+                }
+
+                // If project dual progress exists, render it (fallback check)
+                const dualProgressContainer = document.getElementById("project-dual-progress-container");
+                if (dualProgressContainer) {
+                    const processes = ['Preparación', 'Armado', 'Soldadura', 'Terminación']; const weights = { 'Preparación': 35, 'Armado': 25, 'Soldadura': 25, 'Terminación': 15 };
+                    let progressHtml = '';
+                    processes.forEach(proc => {
+                        let denom = sumQty;
+                        let closedQty = 0;
+                        if (proc === 'Preparación') {
+                            const pParts = state.parts.filter(p => p.projectId === currentProjectId);
+                            denom = pParts.reduce((s, p) => s + p.totalQty, 0);
+                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === 'Preparación' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
+                        } else {
+                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === proc && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
+                        }
+                        if (!denom) return;
+                        const execPct = Math.min(100, Math.round((closedQty / denom) * 100));
+                        const approvedQty = state.inspections.filter(i => i.projectId === currentProjectId && i.type === (proc === 'Terminación' || proc === 'Soldadura' ? 'Soldadura' : 'Dimensional') && i.result === 'Aprobado').reduce((s, i) => s + (i.quantity || 1), 0);
+                        const qualPct = Math.min(100, Math.round((approvedQty / sumQty) * 100));
+                        progressHtml += `<div class="dual-progress"><div class="dual-progress-label"><span>${proc} (${weights[proc]}%)</span><span>Ejec: ${execPct}% | Cal: ${qualPct}%</span></div><div class="progress-track"><div class="progress-fill-exec" style="width:${execPct}%"></div><div class="progress-fill-qual" style="width:${qualPct}%"></div></div><div class="dual-progress-legend"><span><span class="legend-dot" style="background:var(--primary)"></span>Ejecución</span><span><span class="legend-dot" style="background:var(--info)"></span>Calidad</span></div></div>`;
+                    });
+                    dualProgressContainer.innerHTML = progressHtml || '<p style="color:var(--muted);">Cargue elementos para ver el avance.</p>';
+                }
+            } else {
+                document.getElementById("active-project-name").textContent = "Ninguno";
+                if(csvSection) csvSection.style.display = 'none';
+                if(noProject) noProject.style.display = 'block';
+                if(elementsSection) elementsSection.style.display = 'none';
+            }
+        }
+
+        window.dashboardFilter = 'all';
+        window.setDashboardFilter = (filter) => {
+            window.dashboardFilter = filter;
+            renderDashboard();
+        };
+
+        window.getProjectEstimatedHh = function(projectId) {
+            const p = state.projects.find(x => x.id === projectId);
+            if (!p) return 0;
+            if (p.budgetedHhTon && p.budgetedHhTon > 0) {
+                const totalKg = state.elements.filter(e => e.projectId === projectId).reduce((s, e) => s + e.total_weight_kg, 0);
+                return parseFloat((p.budgetedHhTon * (totalKg / 1000)).toFixed(1));
+            }
+            return p.estimatedHh || 0;
+        };
 
         function renderDashboard() {
-            const totalHh = state.timeEntries.reduce((s, e) => s + e.hh, 0); const reworkHh = state.timeEntries.filter(e => e.is_rework).reduce((s, e) => s + e.hh, 0);
+            const totalHh = state.timeEntries.reduce((s, e) => s + e.hh, 0); 
+            const reworkHh = state.timeEntries.filter(e => e.is_rework).reduce((s, e) => s + e.hh, 0);
+            
+            const activeProjects = state.projects.filter(p => calculateProjectProgress(p.id) < 100);
+            const finishedProjects = state.projects.filter(p => calculateProjectProgress(p.id) >= 100);
+            
             document.getElementById("kpi-total-hh").textContent = totalHh.toFixed(1);
             document.getElementById("kpi-rework-hh").textContent = reworkHh.toFixed(1);
-            document.getElementById("kpi-active-projects").textContent = state.projects.length;
-            document.getElementById("kpi-finished-elements").textContent = state.elements.filter(e => e.status === "Terminado").length;
-            document.getElementById("dashboard-projects-list").innerHTML = state.projects.map(p => {
+            document.getElementById("kpi-active-projects").textContent = activeProjects.length;
+            document.getElementById("kpi-finished-elements").textContent = finishedProjects.length;
+            
+            // Highlight active filter card
+            ['all', 'rework', 'active', 'finished'].forEach(f => {
+                const el = document.getElementById(`kpi-card-${f}`);
+                if (el) el.style.opacity = (window.dashboardFilter === f) ? '1' : '0.5';
+            });
+            
+            const filterInput = document.getElementById("dashboard-projects-filter");
+            const filterText = filterInput ? filterInput.value.toLowerCase() : "";
+            
+            let sortedProjects = [...state.projects].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            
+            if (filterText) {
+                sortedProjects = sortedProjects.filter(p => p.otCode.toLowerCase().includes(filterText) || p.projectName.toLowerCase().includes(filterText));
+            }
+            
+            if (window.dashboardFilter === 'rework') {
+                const reworkProjectIds = new Set(state.timeEntries.filter(te => te.is_rework).map(te => te.projectId));
+                sortedProjects = sortedProjects.filter(p => reworkProjectIds.has(p.id));
+            } else if (window.dashboardFilter === 'active') {
+                sortedProjects = sortedProjects.filter(p => calculateProjectProgress(p.id) < 100);
+            } else if (window.dashboardFilter === 'finished') {
+                sortedProjects = sortedProjects.filter(p => calculateProjectProgress(p.id) >= 100);
+            }
+            
+            const vigentes = sortedProjects.filter(p => calculateProjectProgress(p.id) < 100);
+            const terminados = sortedProjects.filter(p => calculateProjectProgress(p.id) >= 100);
+            
+            const renderProjectCard = p => {
                 const pHh = state.timeEntries.filter(e => e.projectId === p.id).reduce((s, e) => s + e.hh, 0);
                 const pElements = state.elements.filter(e => e.projectId === p.id).length;
                 const pTasks = state.tasks.filter(t => t.projectId === p.id && t.status === 'Terminada' && !t.isRework);
@@ -3531,12 +3870,34 @@
                 const totalQty = state.elements.filter(e => e.projectId === p.id).reduce((s, e) => s + e.quantity, 0);
                 const totalKg = state.elements.filter(e => e.projectId === p.id).reduce((s, e) => s + e.total_weight_kg, 0);
                 
-                const stages = [
-                    { id: 'prep', name: 'Preparación', weight: 0.35, colorClass: 'stage-prep', unit: 'Piezas' },
-                    { id: 'armado', name: 'Armado', weight: 0.25, colorClass: 'stage-armado', unit: 'Conj.' },
-                    { id: 'sold', name: 'Soldadura', weight: 0.25, colorClass: 'stage-sold', unit: 'Conj.' },
-                    { id: 'term', name: 'Terminación', weight: 0.15, colorClass: 'stage-term', unit: 'Conj.' }
-                ];
+                const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === p.id);
+                let stages = [];
+                
+                if (projectStages.length > 0) {
+                    const weight = 1.0 / projectStages.length;
+                    stages = projectStages.map(pe => {
+                        const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                        return {
+                            id: em.id,
+                            name: em.nombre,
+                            weight: weight,
+                            colorClass: '',
+                            colorCss: em.colorCss,
+                            unit: (em.nombre === 'Preparación' || em.nombre === 'Corte' || em.nombre === 'Plegado') ? 'Piezas' : 'Conj.'
+                        };
+                    }).sort((a, b) => {
+                        const ea = state.etapasMaestras.find(e => e.id === a.id);
+                        const eb = state.etapasMaestras.find(e => e.id === b.id);
+                        return (ea?.orden || 0) - (eb?.orden || 0);
+                    });
+                } else {
+                    stages = [
+                        { id: 'prep', name: 'Preparación', weight: 0.35, colorClass: 'stage-prep', colorCss: 'var(--primary)', unit: 'Piezas' },
+                        { id: 'armado', name: 'Armado', weight: 0.25, colorClass: 'stage-armado', colorCss: 'var(--info)', unit: 'Conj.' },
+                        { id: 'sold', name: 'Soldadura', weight: 0.25, colorClass: 'stage-sold', colorCss: 'var(--accent)', unit: 'Conj.' },
+                        { id: 'term', name: 'Terminación', weight: 0.15, colorClass: 'stage-term', colorCss: '#8a3330', unit: 'Conj.' }
+                    ];
+                }
                 
                 let weightedAdvance = 0;
                 let stagesHtml = '';
@@ -3548,7 +3909,7 @@
                     let stageKg = 0;
                     let stageQty = 0;
                     
-                    if (st.name === 'Preparación') {
+                    if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
                         stageKg = stageTasks.reduce((s, t) => { const part = state.parts.find(pa => pa.id === t.partId); return s + (part ? part.unit_weight_kg * t.quantity : 0); }, 0);
                         stageQty = stageTasks.reduce((s, t) => s + t.quantity, 0);
                     } else {
@@ -3565,10 +3926,10 @@
                     stagesHtml += `
                         <div class="stage-box ${st.colorClass}">
                             <div class="stage-header">
-                                <div><span class="stage-name">${st.name}</span><span class="stage-weight">(${Math.round(st.weight * 100)}%)</span></div>
-                                <span class="stage-pct">${Math.round(stagePct)}%</span>
+                                <div><span class="stage-name" style="color: ${st.colorCss || 'inherit'}">${st.name}</span><span class="stage-weight">(${Math.round(st.weight * 100)}%)</span></div>
+                                <span class="stage-pct" style="color: ${st.colorCss || 'inherit'}">${Math.round(stagePct)}%</span>
                             </div>
-                            <div class="stage-bar-bg"><div class="stage-bar-fill" style="width: ${Math.round(stagePct)}%;"></div></div>
+                            <div class="stage-bar-bg"><div class="stage-bar-fill" style="width: ${Math.round(stagePct)}%; background: ${st.colorCss || 'inherit'};"></div></div>
                             <div class="stage-details">
                                 <div>Kilos: <span>${Math.round(stageKg).toLocaleString('es-CL')}</span></div>
                                 <div>${st.unit}: <span>${stageQty}</span></div>
@@ -3594,6 +3955,7 @@
                 
                 const daysElapsed = startDate ? Math.max(1, Math.ceil((new Date() - new Date(startDate)) / (1000 * 60 * 60 * 24))) : 0;
                 const avgKgPerDay = daysElapsed > 0 ? (termKg / daysElapsed).toFixed(1) : 0;
+                const budgetedHhTon = p.budgetedHhTon ? parseFloat(p.budgetedHhTon).toFixed(1) : (totalKg > 0 ? (p.estimatedHh / (totalKg / 1000)).toFixed(1) : '0.0');
                 
                 let fechaTermino = 'Sin datos';
                 if (startDate && avgKgPerDay > 0) {
@@ -3610,7 +3972,7 @@
                             <h3>OT ${p.otCode} - ${p.projectName}</h3>
                             <div class="project-stats" style="margin-top: 8px;">
                                 <span>👤 ${p.clientName || 'Sin cliente'}</span>
-                                <span>⏱ HH: ${pHh.toFixed(1)} / ${p.estimatedHh}</span>
+                                <span>⏱ HH: ${pHh.toFixed(1)} / ${window.getProjectEstimatedHh(p.id)}</span>
                                 <span>⚖️ Total Proyecto: ${Math.round(totalKg).toLocaleString('es-CL')} kg</span>
                                 <span>📅 Plazo Orig: ${p.deadline || '--'}</span>
                             </div>
@@ -3626,11 +3988,19 @@
                             </div>
                             <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
                                 <div style="font-size: 10px; font-weight: 800; color: var(--muted);">AVANCE</div>
-                                <div style="font-size: 16px; font-weight: 800; color: var(--primary); margin-top: 2px;">${advancePct}%</div>
+                                <div style="font-size: 16px; font-weight: 800; color: ${advancePct >= 100 ? 'var(--success)' : 'var(--primary)'}; margin-top: 2px;">${advancePct}%</div>
+                            </div>
+                            <div style="text-align: center; background: #e7f4ef; padding: 8px 16px; border-radius: 6px; border: 1px solid #bce2d1;">
+                                <div style="font-size: 10px; font-weight: 800; color: #1a7b68;">KILOS TERMINADOS</div>
+                                <div style="font-size: 16px; font-weight: 800; color: #10594a; margin-top: 2px;">${Math.round(termKg).toLocaleString('es-CL')} kg</div>
                             </div>
                             <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
                                 <div style="font-size: 10px; font-weight: 800; color: var(--muted);">GLOBAL HH/TON</div>
                                 <div style="font-size: 16px; font-weight: 800; color: var(--info); margin-top: 2px;">${globalHhTon}</div>
+                            </div>
+                            <div style="text-align: center; background: #fdf5e6; padding: 8px 16px; border-radius: 6px; border: 1px solid #f6dca6;">
+                                <div style="font-size: 10px; font-weight: 800; color: #b78726;">HH/TON PRESUP.</div>
+                                <div style="font-size: 16px; font-weight: 800; color: #8a6417; margin-top: 2px;">${budgetedHhTon}</div>
                             </div>
                             <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
                                 <div style="font-size: 10px; font-weight: 800; color: var(--muted);">VELOCIDAD</div>
@@ -3644,160 +4014,161 @@
                             ${stagesHtml}
                         </div>
                     </div>
+                    
+                    <div style="border-top:1px solid var(--line); margin-top:16px; padding-top:16px;">
+                        <button onclick="toggleEVMChart('${p.id}')" style="background:transparent; color:var(--primary); font-weight:600; cursor:pointer; padding:6px 12px; border:1px solid var(--primary); border-radius:6px; font-size:12px; transition:all 0.2s;">📊 Ver Análisis de Valor Ganado (EVM)</button>
+                        
+                        <div id="evm-container-${p.id}" style="display:none; margin-top:16px; padding:16px; background:#fcfcfc; border-radius:8px; border:1px solid var(--line);">
+                            <div style="display:flex; gap:16px; margin-bottom:16px;" id="evm-kpis-${p.id}"></div>
+                            <div style="height: 250px; position: relative;">
+                                <canvas id="evm-chart-${p.id}"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
                 </div>`;
-            }).join('') || '<p style="color:var(--muted);">No hay proyectos creados.</p>';
-        }
+            };
 
-        function generateMiniChart(projectId, advancePct, hhPerTon) {
-            const projectEntries = state.timeEntries.filter(e => e.projectId === projectId);
-            const pElements = state.elements.filter(e => e.projectId === projectId);
-            const totalQty = pElements.reduce((s, e) => s + e.quantity, 0);
-            const totalKg = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
-            if (!projectEntries.length) return `<div class="mini-chart"><svg viewBox="0 0 200 70" preserveAspectRatio="none"><line x1="0" y1="65" x2="200" y2="65" stroke="#d8dee6" stroke-width="1"/><text x="100" y="40" text-anchor="middle" font-size="11" fill="#6f7b88">Sin datos</text></svg><div class="mini-chart-info">Sin HH registradas</div></div>`;
-            const entriesByDate = {};
-            projectEntries.forEach(entry => { if (!entriesByDate[entry.work_date]) entriesByDate[entry.work_date] = 0; entriesByDate[entry.work_date] += entry.hh; });
-            const dates = Object.keys(entriesByDate).sort();
-            const advancePoints = [], hhTonPoints = []; let cumulativeHh = 0;
-            
-            const stages = [
-                { name: 'Preparación', weight: 0.35 },
-                { name: 'Armado', weight: 0.25 },
-                { name: 'Soldadura', weight: 0.25 },
-                { name: 'Terminación', weight: 0.15 }
-            ];
-            
-            dates.forEach((date, index) => {
-                cumulativeHh += entriesByDate[date];
-                const tasksClosedByDate = state.tasks.filter(t => t.projectId === projectId && t.status === 'Terminada' && !t.isRework && t.createdAt && t.createdAt.split('T')[0] <= date);
-                
-                let weightedAdvance = 0;
-                stages.forEach(st => {
-                    const stageTasks = tasksClosedByDate.filter(t => t.process === st.name);
-                    let stageKg = 0;
-                    if (st.name === 'Preparación') {
-                        stageKg = stageTasks.reduce((s, t) => { const part = state.parts.find(pa => pa.id === t.partId); return s + (part ? part.unit_weight_kg * t.quantity : 0); }, 0);
-                    } else {
-                        stageKg = stageTasks.reduce((s, t) => { const el = pElements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
-                    }
-                    const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
-                    weightedAdvance += stagePct * st.weight;
-                });
-                const pct = weightedAdvance;
-                
-                const termTasks = tasksClosedByDate.filter(t => t.process === 'Terminación');
-                const termKg = termTasks.reduce((s, t) => { const el = pElements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
-                const hhTon = termKg > 0 ? (cumulativeHh / (termKg / 1000)) : 0;
-                
-                const x = (index / Math.max(dates.length - 1, 1)) * 200; const yA = 65 - (pct / 100) * 60; const yH = 65 - (Math.min(hhTon, 50) / 50) * 60;
-                advancePoints.push({ x, y: yA, pct }); hhTonPoints.push({ x, y: yH, value: hhTon });
-            });
-            const advancePath = advancePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-            const hhTonPath = hhTonPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-            const lastA = advancePoints[advancePoints.length - 1];
-            const daysEl = dates.length; const avgDA = lastA ? lastA.pct / daysEl : 0;
-            let projPath = '', projText = '', projClass = '';
-            if (avgDA > 0 && lastA && lastA.pct < 100) { const dtc = Math.ceil((100 - lastA.pct) / avgDA); const cd = new Date(); cd.setDate(cd.getDate() + dtc); let bd = 0; const td = new Date(); while (td < cd) { if (td.getDay() !== 0 && td.getDay() !== 6) bd++; td.setDate(td.getDate() + 1); } const px = lastA.x + (Math.min(dtc, 30) / 30) * 200; const py = 65 - (100 / 100) * 60; projPath = `M ${lastA.x} ${lastA.y} L ${px} ${py}`; projText = `📅 ${cd.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })} · ${bd} días hábiles`; }
-            else if (lastA && lastA.pct >= 100) { projText = '✅ Completado'; }
-            else { projText = '⚠️ Sin proyección'; projClass = 'warn'; }
-            return `<div class="mini-chart"><svg viewBox="0 0 200 70" preserveAspectRatio="none"><line x1="0" y1="65" x2="200" y2="65" stroke="#d8dee6" stroke-width="1"/><line x1="0" y1="5" x2="200" y2="5" stroke="#d8dee6" stroke-width="0.5" stroke-dasharray="2,2"/><path d="${advancePath}" fill="none" stroke="#166a5b" stroke-width="2.5"/><path d="${hhTonPath}" fill="none" stroke="#27628f" stroke-width="1.5" opacity="0.7"/>${projPath ? `<path d="${projPath}" fill="none" stroke="#166a5b" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6"/>` : ''}${lastA ? `<circle cx="${lastA.x}" cy="${lastA.y}" r="3" fill="#166a5b"/>` : ''}${'</svg>'}<div class="mini-chart-stats"><span style="color:#166a5b;">● ${advancePct}%</span><span style="color:#27628f;">● ${hhPerTon} HH/Ton</span></div><div class="mini-chart-projection ${projClass}">${projText}</div></div>`;
-        }
-
-        function renderProjects() {
-            document.getElementById("projects-list-container").innerHTML = state.projects.map(p => `
-            <div class="project-card" style="cursor:pointer;${currentProjectId === p.id ? 'border-left-color:var(--accent);background:#f6f7f9;' : ''}" onclick="selectProject('${p.id}')">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                    <h3>OT ${p.otCode} - ${p.projectName}</h3>
-                    ${canDelete() ? `<button onclick="event.stopPropagation();deleteProject('${p.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
-                </div>
-                <div class="project-stats"><span>👤 ${p.clientName || 'Sin cliente'}</span><span>📅 ${p.deadline || 'Sin plazo'}</span><span>⏱ ${p.estimatedHh} HH est.</span></div>
-            </div>
-        `).join('') || '<p style="color:var(--muted);">No hay proyectos creados.</p>';
-
-            const project = state.projects.find(p => p.id === currentProjectId);
-            const advancePanel = document.getElementById("project-advance-panel"); const chartPanel = document.getElementById("project-chart-panel");
-            if (project) {
-                document.getElementById("active-project-name").textContent = `OT ${project.otCode} - ${project.projectName}`;
-                document.getElementById("csv-upload-section").style.display = 'block';
-                document.getElementById("no-project-selected").style.display = 'none';
-                document.getElementById("elements-section").style.display = 'block';
-                advancePanel.style.display = 'block'; chartPanel.style.display = 'block';
-                const pElements = state.elements.filter(e => e.projectId === currentProjectId);
-                document.getElementById("elements-count").textContent = `${pElements.length} marcas`;
-                const sumQty = pElements.reduce((s, e) => s + e.quantity, 0);
-                const sumKgTotal = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
-                document.getElementById("elements-table").innerHTML = pElements.map(e => {
-                    const procStatus = computeElementStatus(e.id);
-                    return `<tr>
-                    <td><strong>${e.mark}</strong></td>
-                    <td>${e.quantity}</td>
-                    <td>${e.unit_weight_kg.toFixed(1)}</td>
-                    <td>${e.total_weight_kg.toFixed(1)}</td>
-                    <td>${elementStatusBadge(procStatus)}</td>
-                    <td style="display:flex;gap:4px;">${!isReadOnly() ? `<button onclick="openEditElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''} ${canDelete() ? `<button onclick="deleteElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}</td>
-                    </tr>`;
-                }).join('');
-                document.getElementById("elements-foot").innerHTML = pElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td>${sumQty}</td><td>—</td><td>${sumKgTotal.toFixed(1)}</td><td></td><td></td></tr>` : '';
-
-                const processes = ['Preparación', 'Armado', 'Soldadura', 'Terminación']; const weights = { 'Preparación': 35, 'Armado': 25, 'Soldadura': 25, 'Terminación': 15 };
-                let progressHtml = '';
-                processes.forEach(proc => {
-                    let denom = sumQty;
-                    let closedQty = 0;
-                    if (proc === 'Preparación') {
-                        const pParts = state.parts.filter(p => p.projectId === currentProjectId);
-                        denom = pParts.reduce((s, p) => s + p.totalQty, 0);
-                        closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === 'Preparación' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-                    } else {
-                        closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === proc && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
-                    }
-                    if (!denom) return;
-                    const execPct = Math.min(100, Math.round((closedQty / denom) * 100));
-                    const approvedQty = state.inspections.filter(i => i.projectId === currentProjectId && i.type === (proc === 'Terminación' || proc === 'Soldadura' ? 'Soldadura' : 'Dimensional') && i.result === 'Aprobado').reduce((s, i) => s + (i.quantity || 1), 0);
-                    const qualPct = Math.min(100, Math.round((approvedQty / sumQty) * 100));
-                    progressHtml += `<div class="dual-progress"><div class="dual-progress-label"><span>${proc} (${weights[proc]}%)</span><span>Ejec: ${execPct}% | Cal: ${qualPct}%</span></div><div class="progress-track"><div class="progress-fill-exec" style="width:${execPct}%"></div><div class="progress-fill-qual" style="width:${qualPct}%"></div></div><div class="dual-progress-legend"><span><span class="legend-dot" style="background:var(--primary)"></span>Ejecución</span><span><span class="legend-dot" style="background:var(--info)"></span>Calidad</span></div></div>`;
-                });
-                document.getElementById("project-dual-progress-container").innerHTML = progressHtml || '<p style="color:var(--muted);">Cargue elementos para ver el avance.</p>';
-                renderProjectChart(project, pElements);
+            let html = '';
+            if (vigentes.length > 0) {
+                html += '<h3 style="margin-bottom: 12px; color: var(--ink);">Proyectos Vigentes</h3>';
+                html += vigentes.map(renderProjectCard).join('');
             } else {
-                document.getElementById("active-project-name").textContent = "Ninguno";
-                document.getElementById("csv-upload-section").style.display = 'none';
-                document.getElementById("no-project-selected").style.display = 'block';
-                document.getElementById("elements-section").style.display = 'none';
-                advancePanel.style.display = 'none'; chartPanel.style.display = 'none';
+                html += '<p style="color:var(--muted);">No hay proyectos vigentes que coincidan con la búsqueda.</p>';
             }
+
+            if (terminados.length > 0) {
+                html += '<h3 style="margin-top: 32px; margin-bottom: 12px; color: var(--success);">Proyectos Terminados</h3>';
+                html += terminados.map(renderProjectCard).join('');
+            }
+            
+            document.getElementById("dashboard-projects-list").innerHTML = html;
         }
 
-        function renderProjectChart(project, pElements) {
-            const canvas = document.getElementById('project-chart'); if (!canvas) return;
-            const timeEntries = state.timeEntries.filter(te => te.projectId === currentProjectId);
-            const dates = [...new Set(timeEntries.map(te => te.work_date))].sort();
-            if (!dates.length) { document.getElementById('projection-info').innerHTML = '<span style="color:var(--muted);">Sin datos de HH registrados aún</span>'; return; }
-            const totalQty = pElements.reduce((s, e) => s + e.quantity, 0);
-            const advanceData = [], hhTonData = [], labels = []; let cumulativeHh = 0;
-            dates.forEach(date => {
-                const dayHh = timeEntries.filter(te => te.work_date === date).reduce((s, te) => s + te.hh, 0); cumulativeHh += dayHh;
-                const advancePct = calculateProjectProgressAtDate(currentProjectId, date);
-                const tasksUpToDate = state.tasks.filter(t => { if (t.projectId !== currentProjectId || t.isRework) return false; const te = timeEntries.filter(te => te.taskId === t.id && te.work_date <= date); return te.length > 0; });
-                const fabricatedKg = tasksUpToDate.filter(t => t.status === 'Terminada').reduce((s, t) => {
-                    const el = pElements.find(e => e.id === t.elementId);
-                    if (!el) return s;
-                    if (t.process === 'Preparación' && t.partId) { const part = state.parts.find(p => p.id === t.partId); return s + ((part ? part.unit_weight_kg : 0) * t.quantity); }
-                    return s + (el.unit_weight_kg * t.quantity);
-                }, 0);
-                const hhTon = fabricatedKg > 0 ? (cumulativeHh / (fabricatedKg / 1000)).toFixed(1) : 0;
-                advanceData.push(advancePct); hhTonData.push(parseFloat(hhTon)); labels.push(new Date(date).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }));
+        window.evmCharts = window.evmCharts || {};
+
+        window.toggleEVMChart = (projectId) => {
+            const container = document.getElementById(`evm-container-${projectId}`);
+            if (!container) return;
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                renderEVMChart(projectId);
+            } else {
+                container.style.display = 'none';
+            }
+        };
+
+        function renderEVMChart(projectId) {
+            const canvas = document.getElementById(`evm-chart-${projectId}`);
+            if (!canvas) return;
+            
+            const project = state.projects.find(p => p.id === projectId);
+            if (!project) return;
+            
+            const timeEntries = state.timeEntries.filter(te => te.projectId === projectId).sort((a, b) => new Date(a.work_date) - new Date(b.work_date));
+            
+            const estimatedHh = window.getProjectEstimatedHh(project.id) || 1; // Prevent div by 0
+            let startDateStr = project.startDate;
+            let deadlineStr = project.deadline;
+            
+            if (!startDateStr || !deadlineStr) {
+                startDateStr = timeEntries.length ? timeEntries[0].work_date : project.createdAt.split('T')[0];
+                const endD = new Date(startDateStr);
+                endD.setDate(endD.getDate() + 30);
+                deadlineStr = endD.toISOString().split('T')[0];
+            }
+            
+            const startDate = new Date(startDateStr);
+            const deadline = new Date(deadlineStr);
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            
+            const totalDays = (deadline - startDate) / (1000 * 60 * 60 * 24) || 1;
+            
+            const dates = [];
+            let d = new Date(startDate);
+            const maxDate = new Date(Math.max(deadline.getTime(), today.getTime()));
+            
+            while (d <= maxDate) {
+                dates.push(d.toISOString().split('T')[0]);
+                d.setDate(d.getDate() + 1);
+            }
+            
+            const pvData = [];
+            const evData = [];
+            const acData = [];
+            const labels = [];
+            
+            let cumulativeHh = 0;
+            
+            dates.forEach(dateStr => {
+                const dDate = new Date(dateStr);
+                labels.push(dDate.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }));
+                
+                let pvPct = 0;
+                if (dDate >= deadline) {
+                    pvPct = 100;
+                } else if (dDate > startDate) {
+                    pvPct = ((dDate - startDate) / (1000 * 60 * 60 * 24)) / totalDays * 100;
+                }
+                pvData.push(pvPct);
+                
+                if (dDate > today) {
+                    evData.push(null);
+                    acData.push(null);
+                    return;
+                }
+                
+                const dayHh = timeEntries.filter(te => te.work_date === dateStr).reduce((s, te) => s + te.hh, 0);
+                cumulativeHh += dayHh;
+                const acPct = (cumulativeHh / estimatedHh) * 100;
+                acData.push(acPct);
+                
+                const evPct = calculateProjectProgressAtDate(projectId, dateStr);
+                evData.push(evPct);
             });
-            const currentAdvance = advanceData[advanceData.length - 1]; const currentHhTon = hhTonData[hhTonData.length - 1]; const dailyRate = currentAdvance / dates.length;
-            let projText = '';
-            if (dailyRate > 0 && currentAdvance < 100) { const dtc = Math.ceil((100 - currentAdvance) / dailyRate); const cd = new Date(); cd.setDate(cd.getDate() + dtc); let bd = 0; const td = new Date(); while (td < cd) { if (td.getDay() !== 0 && td.getDay() !== 6) bd++; td.setDate(td.getDate() + 1); } projText = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"><div style="background:#e7f4ef;padding:12px;border-radius:6px;border-left:4px solid var(--primary);"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;">Proyección de Término</div><div style="font-size:20px;font-weight:700;color:var(--primary);margin-top:4px;">${cd.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div><div style="background:#eef2f5;padding:12px;border-radius:6px;border-left:4px solid var(--info);"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;">Días Hábiles Restantes</div><div style="font-size:20px;font-weight:700;color:var(--info);margin-top:4px;">${bd} días</div></div></div><div style="font-size:13px;color:var(--muted);"><strong>Ritmo actual:</strong> ${dailyRate.toFixed(1)}% diario | <strong>HH/Ton:</strong> ${currentHhTon}</div>`; }
-            else if (currentAdvance >= 100) { projText = `<div style="background:#e7f4ef;padding:16px;border-radius:6px;border-left:4px solid var(--primary);text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--primary);">✅ Proyecto Completado</div><div style="font-size:14px;color:var(--muted);margin-top:8px;">HH/Ton final: <strong>${currentHhTon}</strong></div></div>`; }
-            else { projText = `<div style="background:#fff4dc;padding:16px;border-radius:6px;border-left:4px solid var(--accent);text-align:center;"><div style="font-size:16px;font-weight:700;color:#855900;">⚠️ Ritmo insuficiente para proyectar término</div><div style="font-size:13px;color:var(--muted);margin-top:8px;">Registre más horas de trabajo para calcular la proyección</div></div>`; }
-            document.getElementById('projection-info').innerHTML = projText;
-            const projectionData = [...advanceData];
-            if (dailyRate > 0 && currentAdvance < 100) { const dtc = Math.ceil((100 - currentAdvance) / dailyRate); for (let i = 0; i < dtc; i++) { projectionData.push(Math.min(100, currentAdvance + (dailyRate * (i + 1)))); labels.push(''); hhTonData.push(currentHhTon); } }
-            if (window.projectChart) window.projectChart.destroy();
+            
+            const validEvData = evData.filter(v => v !== null);
+            const currentEv = validEvData.length ? validEvData[validEvData.length - 1] : 0;
+            const validAcData = acData.filter(v => v !== null);
+            const currentAc = validAcData.length ? validAcData[validAcData.length - 1] : 0;
+            const currentPv = pvData[validEvData.length - 1] || 0;
+            
+            const spi = currentPv > 0 ? (currentEv / currentPv) : 1;
+            const cpi = currentAc > 0 ? (currentEv / currentAc) : 1;
+            
+            const kpiContainer = document.getElementById(`evm-kpis-${projectId}`);
+            if (kpiContainer) {
+                let spiHtml = `<div style="flex:1; background:${spi >= 1 ? '#e7f4ef' : '#fbeaea'}; padding:12px; border-radius:6px; border-left:4px solid ${spi >= 1 ? 'var(--success)' : 'var(--danger)'};">
+                    <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">SPI (Cronograma)</div>
+                    <div style="font-size:18px; font-weight:700; color:${spi >= 1 ? 'var(--success)' : 'var(--danger)'}; margin-top:4px;">${spi.toFixed(2)} ${spi >= 1 ? '✅' : '⚠️'}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:4px;">${spi >= 1 ? 'Adelantado o a tiempo' : 'Atrasado'}</div>
+                </div>`;
+                
+                let cpiHtml = `<div style="flex:1; background:${cpi >= 1 ? '#e7f4ef' : '#fbeaea'}; padding:12px; border-radius:6px; border-left:4px solid ${cpi >= 1 ? 'var(--success)' : 'var(--danger)'};">
+                    <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">CPI (Costo/HH)</div>
+                    <div style="font-size:18px; font-weight:700; color:${cpi >= 1 ? 'var(--success)' : 'var(--danger)'}; margin-top:4px;">${cpi.toFixed(2)} ${cpi >= 1 ? '✅' : '⚠️'}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:4px;">${cpi >= 1 ? 'Bajo o dentro de Presupuesto' : 'Sobre Presupuesto'}</div>
+                </div>`;
+                
+                kpiContainer.innerHTML = spiHtml + cpiHtml;
+            }
+            
+            if (window.evmCharts[projectId]) window.evmCharts[projectId].destroy();
             const ctx = canvas.getContext('2d');
-            window.projectChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: '% Avance', data: projectionData, borderColor: '#166a5b', backgroundColor: 'rgba(22,106,91,0.1)', borderWidth: 3, fill: true, tension: 0.3, yAxisID: 'y', borderDash: currentAdvance < 100 ? [5, 5] : [], pointRadius: 4, pointHoverRadius: 6 }, { label: 'HH/Ton', data: hhTonData, borderColor: '#27628f', backgroundColor: 'rgba(39,98,143,0.1)', borderWidth: 2, fill: false, tension: 0.3, yAxisID: 'y1', pointRadius: 3, pointHoverRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, position: 'top' }, tooltip: { callbacks: { label: function (c) { return c.datasetIndex === 0 ? `Avance: ${c.parsed.y}%` : `HH/Ton: ${c.parsed.y}`; } } }, }, scales: { y: { type: 'linear', display: true, position: 'left', min: 0, max: 100, title: { display: true, text: '% Avance', color: '#166a5b', font: { weight: 'bold' } }, ticks: { color: '#166a5b', callback: v => v + '%' } }, y1: { type: 'linear', display: true, position: 'right', min: 0, title: { display: true, text: 'HH/Ton', color: '#27628f', font: { weight: 'bold' } }, ticks: { color: '#27628f' }, grid: { drawOnChartArea: false } }, x: { title: { display: true, text: 'Fecha', font: { weight: 'bold' } } } } } });
+            
+            window.evmCharts[projectId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Valor Planeado (PV %)', data: pvData, borderColor: '#6f7b88', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0, tension: 0 },
+                        { label: 'Valor Ganado (EV %)', data: evData, borderColor: '#166a5b', backgroundColor: 'rgba(22,106,91,0.1)', borderWidth: 3, fill: true, pointRadius: 3, tension: 0.2 },
+                        { label: 'Costo Real (AC %)', data: acData, borderColor: '#c92a2a', borderWidth: 2, fill: false, pointRadius: 3, tension: 0.2 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', min: 0, max: Math.max(100, Math.max(...acData) + 10), ticks: { callback: v => v.toFixed(0) + '%' } } } }
+            });
         }
 
         let taskFilters = { projectId: '', process: '', workerId: '' };
@@ -5701,7 +6072,7 @@
             if (prodFilters.workerId) filteredWorkers = activeWorkers.filter(w => w.id === prodFilters.workerId);
 
             const workerStats = filteredWorkers.map(worker => {
-                const workerTasks = filteredTasks.filter(t => t.workerIds.includes(worker.id));
+                const workerTasks = filteredTasks.filter(t => t.workerIds.includes(worker.id) || state.timeEntries.some(te => te.taskId === t.id && te.workerId === worker.id));
                 if (!workerTasks.length) return { worker, totalKg: 0, daysWorked: 0, avgKgPerDay: 0, totalHh: 0, hhPerTon: 0, elementsProcessed: [] };
                 
                 let totalKg = 0; const elementsProcessed = new Map();
@@ -5762,12 +6133,23 @@
             summaryCont.innerHTML = htmlSummary;
 
             // 4. Renderizar Tareas Cerradas con Paginación
-            const totalPages = Math.ceil(filteredTasks.length / PROD_TASKS_PER_PAGE);
+            
+            // Add lastDate to tasks for sorting
+            const tasksWithDates = filteredTasks.map(task => {
+                const taskEntries = state.timeEntries.filter(te => te.taskId === task.id);
+                const lastDate = taskEntries.length > 0 ? taskEntries.map(te => te.work_date).sort().at(-1) : '1970-01-01';
+                return { ...task, lastDate };
+            });
+            
+            // Sort by most recent date first
+            tasksWithDates.sort((a, b) => new Date(b.lastDate) - new Date(a.lastDate));
+            
+            const totalPages = Math.ceil(tasksWithDates.length / PROD_TASKS_PER_PAGE);
             if (prodCurrentPage > totalPages) prodCurrentPage = totalPages;
             if (prodCurrentPage < 1) prodCurrentPage = 1;
             
             const startIdx = (prodCurrentPage - 1) * PROD_TASKS_PER_PAGE;
-            const pagedTasks = filteredTasks.slice(startIdx, startIdx + PROD_TASKS_PER_PAGE);
+            const pagedTasks = tasksWithDates.slice(startIdx, startIdx + PROD_TASKS_PER_PAGE);
 
             let htmlTasks = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
