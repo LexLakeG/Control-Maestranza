@@ -573,6 +573,8 @@
             border-radius: 10px;
             width: 90%;
             max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
         }
 
@@ -1743,6 +1745,8 @@
                 <label>Fecha Compromiso
                     <input type="date" id="edit-proj-deadline">
                 </label>
+                <h3 style="grid-column: 1/-1; border-bottom: 1px solid var(--line); margin-top: 12px; padding-bottom: 8px;">Etapas del Proyecto</h3>
+                <div id="edit-project-stages-checkboxes" style="grid-column: 1/-1; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;"></div>
                 <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                     <button type="button" class="warn-btn" onclick="closeEditProjectModal()">Cancelar</button>
                     <button type="submit" class="primary">Guardar Cambios</button>
@@ -1961,8 +1965,7 @@
         // 🏗️  OPERACIONES DE BASE DE DATOS
         // ════════════════════════════════════════════════════════
 
-        // --- Proyectos ---
-        async function dbUpdateProject(id, data) {
+        async function dbUpdateProject(id, data, selectedStages) {
             const payload = {
                 ot_code: data.otCode,
                 project_name: data.projectName,
@@ -1974,6 +1977,26 @@
             
             const { error } = await db.from('projects').update(payload).eq('id', id);
             if (error) { throw error; }
+
+            if (selectedStages) {
+                await db.from('proyecto_etapas').delete().eq('project_id', id);
+                state.proyectoEtapas = state.proyectoEtapas.filter(pe => pe.projectId !== id);
+
+                if (selectedStages.length > 0) {
+                    const inserts = selectedStages.map(stage => ({
+                        project_id: id,
+                        etapa_id: stage.id,
+                        peso: stage.peso
+                    }));
+                    const { data: peData, error: peError } = await db.from('proyecto_etapas').insert(inserts).select();
+                    if (peError) { 
+                        throw new Error('Error guardando etapas (Posible falta de columna peso en BD): ' + peError.message); 
+                    }
+                    if (peData) {
+                        peData.forEach(pe => state.proyectoEtapas.push(norm.proyectoEtapa(pe)));
+                    }
+                }
+            }
         }
 
         async function dbInsertProject(p, selectedStages) {
@@ -1987,7 +2010,7 @@
                     peso: stage.peso
                 }));
                 const { data: peData, error: peError } = await db.from('proyecto_etapas').insert(inserts).select();
-                if (peError) { console.error('Error insertando etapas del proyecto:', peError); }
+                if (peError) { alert('El proyecto se creó, pero falló la carga de etapas: ' + peError.message + '. Asegúrate de ejecutar el código SQL en Supabase para crear la columna peso.'); }
                 else if (peData) {
                     peData.forEach(pe => state.proyectoEtapas.push(norm.proyectoEtapa(pe)));
                 }
@@ -2398,8 +2421,23 @@
         // ════════════════════════════════════════════════════════
         document.getElementById("edit-project-form").addEventListener("submit", async (e) => {
             e.preventDefault();
-            if (!canDelete()) { alert('⚠️ Solo el rol Admin puede editar proyectos.'); return; }
+            if (!canDelete()) { alert('🛑 Solo el rol Admin puede editar proyectos.'); return; }
             
+            const formEl = document.getElementById("edit-project-form");
+            const selectedStages = [];
+            let totalWeight = 0;
+            formEl.querySelectorAll('input[name="edit_stages"]:checked').forEach(cb => {
+                const weightInput = formEl.querySelector(`input[name="edit_weight_${cb.value}"]`);
+                const weight = parseFloat(weightInput.value) || 0;
+                totalWeight += weight;
+                selectedStages.push({ id: cb.value, peso: weight });
+            });
+
+            if (selectedStages.length > 0 && totalWeight !== 100) {
+                alert(`La suma de los porcentajes de las etapas debe ser exactamente 100%. Actualmente suma ${totalWeight}%.`);
+                return;
+            }
+
             const id = document.getElementById('edit-proj-id').value;
             const updates = {
                 otCode: document.getElementById('edit-proj-ot').value.trim(),
@@ -2411,16 +2449,15 @@
             };
             
             try {
-                await dbUpdateProject(id, updates);
-                const pIndex = state.projects.findIndex(p => p.id === id);
-                if(pIndex > -1) {
-                    state.projects[pIndex] = { ...state.projects[pIndex], ...updates };
+                await dbUpdateProject(id, updates, selectedStages);
+                const p = state.projects.find(x => x.id === id);
+                if (p) {
+                    Object.assign(p, updates);
                 }
                 closeEditProjectModal();
                 renderAll();
             } catch (err) {
-                console.error(err);
-                alert('Error al actualizar el proyecto.');
+                alert('Error al guardar proyecto: ' + err.message);
             }
         });
 
@@ -2547,6 +2584,29 @@
             document.getElementById('edit-proj-hh-ton').value = p.budgetedHhTon || 0;
             document.getElementById('edit-proj-start').value = p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : '';
             document.getElementById('edit-proj-deadline').value = p.deadline ? new Date(p.deadline).toISOString().split('T')[0] : '';
+            
+            const container = document.getElementById('edit-project-stages-checkboxes');
+            const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === p.id);
+            if (state.etapasMaestras && state.etapasMaestras.length > 0) {
+                container.innerHTML = state.etapasMaestras.map(etapa => {
+                    const existing = projectStages.find(pe => pe.etapaId === etapa.id);
+                    const isChecked = existing ? 'checked' : '';
+                    const weightVal = existing ? existing.peso : '';
+                    const disabledStr = existing ? '' : 'disabled';
+                    return `
+                    <label style="cursor:pointer; display:flex; align-items:center; gap:6px; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="checkbox" name="edit_stages" value="${etapa.id}" class="stage-cb" onchange="this.parentElement.nextElementSibling.disabled = !this.checked" ${isChecked}>
+                            <span>${etapa.nombre}</span>
+                        </div>
+                        <input type="number" name="edit_weight_${etapa.id}" min="1" max="100" placeholder="%" style="width: 70px; padding: 2px 4px;" value="${weightVal}" ${disabledStr} required>
+                    </label>
+                    `;
+                }).join('');
+            } else {
+                container.innerHTML = '<span style="color:var(--muted); font-size:12px;">No hay etapas maestras en la BD.</span>';
+            }
+            
             document.getElementById('edit-project-modal').style.display = 'flex';
         };
 
@@ -3878,13 +3938,13 @@
                 let stages = [];
                 
                 if (projectStages.length > 0) {
-                    const weight = 1.0 / projectStages.length;
                     stages = projectStages.map(pe => {
                         const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                        const stageWeight = (pe.peso || (100 / projectStages.length)) / 100.0;
                         return {
                             id: em.id,
                             name: em.nombre,
-                            weight: weight,
+                            weight: stageWeight,
                             colorClass: '',
                             colorCss: em.colorCss,
                             unit: (em.nombre === 'Preparación' || em.nombre === 'Corte' || em.nombre === 'Plegado') ? 'Piezas' : 'Conj.'
