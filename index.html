@@ -3106,12 +3106,15 @@
                     const qty = (qtyToAssign !== null) ? qtyToAssign : available;
                     if (qty <= 0 || qty > available) continue;
 
-                    const existingCount = state.tasks.filter(t => t.projectId === projectId && t.process === process && t.elementId === el.id).length;
-                    const newlyAddedCount = newTasksCountByElement[el.id] || 0;
-                    const count = existingCount + newlyAddedCount + 1;
-                    newTasksCountByElement[el.id] = newlyAddedCount + 1;
-
-                    const code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    const existingCount = state.tasks.filter(t => t.projectId === projectId && t.process === process && state.elements.find(e => e.id === t.elementId)?.mark === el.mark).length;
+                    const newlyAddedCount = newTasksCountByElement[el.mark] || 0;
+                    let count = existingCount + newlyAddedCount + 1;
+                    let code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    while (state.tasks.some(t => t.code === code) || tasksToCreate.some(t => t.code === code)) {
+                        count++;
+                        code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    }
+                    newTasksCountByElement[el.mark] = count - existingCount;
                     tasksToCreate.push(createTaskObj(el.id, part.id, qty, code));
                 }
             } else {
@@ -3142,12 +3145,15 @@
 
 
 
-                    const existingCount = state.tasks.filter(t => t.projectId === projectId && t.process === process && t.elementId === el.id).length;
-                    const newlyAddedCount = newTasksCountByElement[el.id] || 0;
-                    const count = existingCount + newlyAddedCount + 1;
-                    newTasksCountByElement[el.id] = newlyAddedCount + 1;
-
-                    const code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    const existingCount = state.tasks.filter(t => t.projectId === projectId && t.process === process && state.elements.find(e => e.id === t.elementId)?.mark === el.mark).length;
+                    const newlyAddedCount = newTasksCountByElement[el.mark] || 0;
+                    let count = existingCount + newlyAddedCount + 1;
+                    let code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    while (state.tasks.some(t => t.code === code) || tasksToCreate.some(t => t.code === code)) {
+                        count++;
+                        code = `${project.otCode}-${el.mark}-${process.substring(0, 3).toUpperCase()}-${String(count).padStart(3, '0')}`;
+                    }
+                    newTasksCountByElement[el.mark] = count - existingCount;
                     tasksToCreate.push(createTaskObj(el.id, null, qty, code));
                 }
             }
@@ -5268,12 +5274,15 @@
 
                 if (pending <= 0) continue;
 
-                const existingCount = state.tasks.filter(t => t.projectId === selectedProjectId && t.process === 'Preparación' && t.elementId === element.id).length;
-                const newlyAddedCount = newTasksCountByElement[element.id] || 0;
-                const count = existingCount + newlyAddedCount + 1;
-                newTasksCountByElement[element.id] = newlyAddedCount + 1;
-
-                const code = `${project.otCode}-${element.mark}-PREP-${String(count).padStart(3, '0')}`;
+                const existingCount = state.tasks.filter(t => t.projectId === selectedProjectId && t.process === 'Preparación' && state.elements.find(e => e.id === t.elementId)?.mark === element.mark).length;
+                const newlyAddedCount = newTasksCountByElement[element.mark] || 0;
+                let count = existingCount + newlyAddedCount + 1;
+                let code = `${project.otCode}-${element.mark}-PREP-${String(count).padStart(3, '0')}`;
+                while (state.tasks.some(t => t.code === code) || tasksToCreate.some(t => t.code === code)) {
+                    count++;
+                    code = `${project.otCode}-${element.mark}-PREP-${String(count).padStart(3, '0')}`;
+                }
+                newTasksCountByElement[element.mark] = count - existingCount;
 
                 tasksToCreate.push({
                     id: crypto.randomUUID(),
