@@ -237,23 +237,26 @@
         }
 
         .kpi {
-            border-top: 4px solid var(--primary);
+            border-top: none;
+            border-left: 3px solid var(--primary);
+            padding: 10px 14px;
         }
 
         .kpi.danger {
-            border-top-color: var(--danger);
+            border-left-color: var(--danger);
         }
 
         .kpi span,
         .kpi small {
             display: block;
             color: var(--muted);
+            font-size: 10px;
         }
 
         .kpi strong {
             display: block;
-            margin: 10px 0 4px;
-            font-size: 28px;
+            margin: 4px 0 2px;
+            font-size: 20px;
         }
 
         .content-grid,
@@ -348,14 +351,49 @@
         .project-card {
             border: 1px solid var(--line);
             border-radius: 8px;
-            padding: 16px;
+            padding: 0;
             background: #fff;
             margin-bottom: 12px;
-            border-left: 5px solid var(--primary);
-            display: flex;
-            gap: 16px;
-            align-items: flex-start;
+            border-left: 4px solid var(--primary);
+            display: block;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s;
         }
+        .project-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+
+        .project-header-clickable {
+            padding: 16px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: background 0.15s;
+        }
+        .project-header-clickable:hover { background: #f9fafb; }
+
+        .project-body {
+            display: none;
+            padding: 0 16px 16px 16px;
+            border-top: 1px dashed var(--line);
+            background: #fafafa;
+        }
+        .project-card.expanded .project-body { display: block; }
+
+        .expand-icon {
+            font-size: 14px;
+            color: var(--muted);
+            transition: transform 0.3s;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .project-card.expanded .expand-icon { transform: rotate(180deg); }
+
+        .p-kpi { text-align: center; background: #eef2f5; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--line); }
+        .p-kpi.highlight { background: #e7f4ef; border-color: #bce2d1; }
+        .p-kpi.warning { background: #fdf5e6; border-color: #f6dca6; }
+        .p-kpi-label { font-size: 9px; font-weight: 800; color: var(--muted); }
+        .p-kpi-val { font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 2px; }
 
         .project-card-content {
             flex: 1;
@@ -408,7 +446,7 @@
         /* New Styles for Stages */
         .stages-container { margin-top: 20px; border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: #fbfcfd; }
         .stages-title { font-size: 11px; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; }
-        .stages-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .stages-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
         .stage-box { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--line); padding: 10px; border-radius: 6px; }
         .stage-header { display: flex; justify-content: space-between; font-size: 12px; align-items: center; margin-bottom: 4px; }
         .stage-name { font-weight: 700; color: var(--ink); }
@@ -1280,6 +1318,7 @@
             <button class="nav-item" data-view="projects">📁 <span>Proyectos</span></button>
             <button class="nav-item" data-view="tasks">□ <span>Tareas</span></button>
             <button class="nav-item" data-view="hours">◷ <span>Registro HH</span></button>
+            <button class="nav-item" data-view="hh-indirectas">🏢 <span>HH Indirectas</span></button>
             <button class="nav-item" data-view="quality">✓ <span>Calidad</span></button>
             <button class="nav-item" data-view="reports">📑 <span>Reportes</span></button>
             <button class="nav-item" data-view="settings">⚙ <span>Config.</span></button>
@@ -1595,6 +1634,185 @@
             </div>
         </section>
 
+        <!-- HH INDIRECTAS -->
+        <!-- HH INDIRECTAS -->
+        <section id="hh-indirectas" class="view">
+            <div style="display: flex; flex-direction: column; gap: 24px; width: 100%;">
+                <!-- PANEL 1: REGISTRO Y GESTIÓN DE HH INDIRECTAS -->
+                <div class="panel" style="width: 100%; box-sizing: border-box;">
+                    <div class="panel-head" style="margin-bottom: 8px;">
+                        <h2>Registro de HH Indirectas</h2><span>HH Administrativos de Operaciones y HH Administrativa</span>
+                    </div>
+                    <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+                        Registra las horas mensuales del personal de operaciones y administrativo. Estas horas se prorratearán automáticamente entre los proyectos activos en proporción a sus HH Directas consumidas.
+                    </p>
+                    
+                    <!-- Selector de Período y Resumen de Totales -->
+                    <div style="display: flex; gap: 16px; align-items: center; background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 20px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 14px; font-weight: 700; color: var(--text);">📅 Período de Cálculo:</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 13px; font-weight: 600; margin: 0;">Año:
+                                <input type="number" id="hhi-anio" min="2024" max="2030" onchange="onHHIPeriodChange()" style="width: 90px; padding: 4px 8px; margin-left: 4px;">
+                            </label>
+                            <label style="font-size: 13px; font-weight: 600; margin: 0;">Mes:
+                                <select id="hhi-mes" onchange="onHHIPeriodChange()" style="padding: 4px 8px; margin-left: 4px;">
+                                    <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+                                    <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+                                    <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+                                    <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div style="margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <span id="hhi-sup-badge" style="font-size: 12px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 6px; border: 1px solid #bae6fd;">Adm. Operaciones: 0.0 HH</span>
+                            <span id="hhi-adm-badge" style="font-size: 12px; font-weight: 700; background: #fce7f3; color: #be185d; padding: 6px 12px; border-radius: 6px; border: 1px solid #fbcfe8;">Administrativa: 0.0 HH</span>
+                            <span id="hhi-total-badge" style="font-size: 13px; font-weight: 800; background: #f3f4f6; color: var(--primary); padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line);">Total Mes: 0.0 HH</span>
+                        </div>
+                    </div>
+
+                    <!-- 1. REGISTRO MANUAL / NUEVO TRABAJADOR O TERCERO -->
+                    <div style="margin-bottom: 24px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px;">
+                                ➕ Registro de HH (Personal Indirecto o Externo)
+                            </h4>
+                            <span style="font-size: 12px; color: var(--muted);">Ingresa nombre y selecciona el rol según el tipo de HH</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1.6fr 1.3fr 1.3fr 1fr auto; gap: 12px; align-items: flex-end;">
+                            <div>
+                                <label style="font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 4px;">
+                                    Nombre Completo / Proveedor:
+                                </label>
+                                <input type="text" id="hhi-manual-nombre" placeholder="Ej: Juan Pérez, Servicios Grúa SpA..." style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 4px;">
+                                    Tipo de HH:
+                                </label>
+                                <select id="hhi-manual-tipo" onchange="onManualTipoChange()" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box;">
+                                    <option value="Supervisión">👷 HH Adm. de Operaciones</option>
+                                    <option value="Administrativa">🏢 HH Administrativa</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 4px;">
+                                    Rol / Cargo:
+                                </label>
+                                <select id="hhi-manual-rol" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box;">
+                                    <option value="Grúa">Grúa</option>
+                                    <option value="Pañol">Pañol</option>
+                                    <option value="Supervisor">Supervisor</option>
+                                    <option value="Prevención">Prevención</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 4px;">
+                                    Cantidad HH:
+                                </label>
+                                <input type="number" id="hhi-manual-cantidad" min="0" step="0.5" placeholder="Ej: 45" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-weight: 700; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <button class="primary" onclick="addManualHHIndirecta()" style="height: 38px; padding: 0 16px; font-weight: 700; white-space: nowrap;">
+                                    + Registrar HH
+                                </button>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; display: flex; align-items: center; gap: 6px;">
+                            <input type="checkbox" id="hhi-manual-add-worker" style="cursor: pointer; width: 15px; height: 15px;">
+                            <label for="hhi-manual-add-worker" style="font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;">
+                                Guardar también en nómina de Trabajadores permanentes (aparecerá en la planilla mensual todos los meses)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 2. PLANILLA MENSUAL POR TRABAJADOR -->
+                    <div style="margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <h3 style="margin: 0; font-size: 15px; color: var(--text);">📋 Planilla Mensual de Personal Indirecto (Nómina Registrada)</h3>
+                            <button class="primary" onclick="saveAllIndirectWorkersHH()" style="padding: 6px 14px; font-size: 12px; font-weight: 700;">💾 Guardar Todos los Cambios</button>
+                        </div>
+                        <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px 0;">
+                            Ingresa las horas mensuales trabajadas por el personal de operaciones (Grúa, Pañol, Supervisor, Prevención) y administrativo (Jefe de Operaciones, RRHH, Jefe de Proyecto, Gerente). Puedes editar los valores o eliminar registros en caso de error de digitación.
+                        </p>
+                        <div class="table-wrap">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 90px;">Cód. RRHH</th>
+                                        <th>Trabajador</th>
+                                        <th>Cargo</th>
+                                        <th>Tipo HH</th>
+                                        <th style="width: 130px;">HH Trabajadas</th>
+                                        <th style="width: 150px;">Estado Registro</th>
+                                        <th style="width: 160px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="hhi-workers-sheet-body">
+                                    <tr><td colspan="7" style="color: var(--muted); text-align: center;">Cargando planilla...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 3. DETALLE DE REGISTROS EN BASE DE DATOS -->
+                    <div style="margin-bottom: 12px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: var(--text);">📑 Detalle de Registros Guardados en Base de Datos (Mes Seleccionado)</h4>
+                        <div class="table-wrap">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 70px;">Año</th>
+                                        <th style="width: 90px;">Mes</th>
+                                        <th style="width: 140px;">Clasificación</th>
+                                        <th>Persona / Cargo</th>
+                                        <th style="width: 120px;">HH Registradas</th>
+                                        <th style="width: 160px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="hhi-table-body">
+                                    <tr><td colspan="6" style="color: var(--muted); text-align: center;">Sin registros para este mes</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- PANEL 2: VISTA DE PRORRATEO Y DISTRIBUCIÓN -->
+                <div class="panel" style="width: 100%; box-sizing: border-box;">
+                    <div class="panel-head" style="margin-bottom: 8px;">
+                        <h2>Vista de Prorrateo</h2><span>Distribución automática proporcional por proyecto (OT)</span>
+                    </div>
+                    <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+                        Las HH indirectas se distribuyen proporcionalmente según las HH directas consumidas por cada proyecto en el mes seleccionado.
+                    </p>
+                    <div style="margin-bottom: 14px;">
+                        <label style="font-size: 13px; font-weight: 700;">Mes a visualizar:
+                            <select id="hhi-prorrateo-mes" onchange="renderProrrateo()" style="padding: 4px 8px; margin-left: 6px; border-radius: 4px; border: 1px solid var(--line);"></select>
+                        </label>
+                    </div>
+                    <div class="table-wrap">
+                        <table style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Proyecto (OT)</th>
+                                    <th style="width: 120px;">HH Directas</th>
+                                    <th style="width: 100px;">% del Total</th>
+                                    <th style="width: 160px;">HH Adm. Operaciones Prorat.</th>
+                                    <th style="width: 150px;">HH Admin Prorat.</th>
+                                    <th style="width: 150px;">HH Total Proyecto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hhi-prorrateo-body">
+                                <tr><td colspan="6" style="color: var(--muted); text-align: center;">Seleccione un mes</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- REPORTES -->
         <section id="reports" class="view">
             <div class="content-grid">
@@ -1661,6 +1879,7 @@
                                 <th>Cód. RRHH</th>
                                 <th>Nombre</th>
                                 <th>Cargo</th>
+                                <th>Tipo HH</th>
                                 <th>Estado</th>
                                 <th>Acción</th>
                             </tr>
@@ -1811,12 +2030,25 @@
                 <label>Código RRHH <input type="text" name="rrhhCode" required></label>
                 <label>Nombre Completo <input type="text" name="name" required></label>
                 <label>Cargo <select name="role" required>
-                        <option value="M1">M1</option>
-                        <option value="OPERADOR">OPERADOR</option>
-                        <option value="SUP">SUP</option>
-                        <option value="SOLD M2">SOLD M2</option>
-                        <option value="AYUD">AYUD</option>
-                        <option value="M1 PINT">M1 PINT</option>
+                        <optgroup label="🛠️ Mano de Obra Directa (Taller)">
+                            <option value="M1">M1</option>
+                            <option value="OPERADOR">OPERADOR</option>
+                            <option value="SOLD M2">SOLD M2</option>
+                            <option value="AYUD">AYUD</option>
+                            <option value="M1 PINT">M1 PINT</option>
+                        </optgroup>
+                        <optgroup label="👷 HH Administrativos de Operaciones">
+                            <option value="Grúa">Grúa</option>
+                            <option value="Pañol">Pañol</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Prevención">Prevención</option>
+                        </optgroup>
+                        <optgroup label="🏢 HH Administrativa">
+                            <option value="Jefe de Operaciones">Jefe de Operaciones</option>
+                            <option value="RRHH">RRHH</option>
+                            <option value="Jefe de Proyecto">Jefe de Proyecto</option>
+                            <option value="Gerente">Gerente</option>
+                        </optgroup>
                     </select></label>
                 <button type="submit" class="primary wide">Guardar</button>
             </form>
@@ -1835,12 +2067,25 @@
                 <label>Código RRHH <input type="text" id="edit-w-rrhh" required></label>
                 <label>Nombre Completo <input type="text" id="edit-w-name" required></label>
                 <label>Cargo <select id="edit-w-role" required>
-                        <option value="M1">M1</option>
-                        <option value="OPERADOR">OPERADOR</option>
-                        <option value="SUP">SUP</option>
-                        <option value="SOLD M2">SOLD M2</option>
-                        <option value="AYUD">AYUD</option>
-                        <option value="M1 PINT">M1 PINT</option>
+                        <optgroup label="🛠️ Mano de Obra Directa (Taller)">
+                            <option value="M1">M1</option>
+                            <option value="OPERADOR">OPERADOR</option>
+                            <option value="SOLD M2">SOLD M2</option>
+                            <option value="AYUD">AYUD</option>
+                            <option value="M1 PINT">M1 PINT</option>
+                        </optgroup>
+                        <optgroup label="👷 HH Administrativos de Operaciones">
+                            <option value="Grúa">Grúa</option>
+                            <option value="Pañol">Pañol</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Prevención">Prevención</option>
+                        </optgroup>
+                        <optgroup label="🏢 HH Administrativa">
+                            <option value="Jefe de Operaciones">Jefe de Operaciones</option>
+                            <option value="RRHH">RRHH</option>
+                            <option value="Jefe de Proyecto">Jefe de Proyecto</option>
+                            <option value="Gerente">Gerente</option>
+                        </optgroup>
                     </select></label>
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
                     <button type="button" onclick="closeEditWorkerModal()">Cancelar</button>
@@ -1916,6 +2161,7 @@
             inspection: i => ({ id: i.id, projectId: i.project_id, elementId: i.element_id, type: i.type, result: i.result, observation: i.observation || '', quantity: i.quantity || 1, date: i.date }),
             etapaMaestra: em => ({ id: em.id, nombre: em.nombre, orden: em.orden, colorCss: em.color_css }),
             proyectoEtapa: pe => ({ id: pe.id, projectId: pe.project_id, etapaId: pe.etapa_id, estado: pe.estado, progresoPorcentaje: pe.progreso_porcentaje, peso: parseFloat(pe.peso) || 25 }),
+            hhIndirecta: h => ({ id: h.id, anio: h.anio, mes: h.mes, tipo: h.tipo, nombreRol: h.nombre_rol, cantidadHh: parseFloat(h.cantidad_hh) || 0, createdAt: h.created_at }),
         };
 
         // ════════════════════════════════════════════════════════
@@ -1932,6 +2178,7 @@
                 { data: inspections, error: e7 },
                 { data: etapasMaestras, error: e8 },
                 { data: proyectoEtapas, error: e9 },
+                { data: hhIndirectas, error: e10 },
             ] = await Promise.all([
                 db.from('projects').select('*').order('created_at'),
                 db.from('workers').select('*').order('created_at'),
@@ -1942,8 +2189,9 @@
                 db.from('inspections').select('*').order('created_at'),
                 db.from('etapas_maestras').select('*').order('orden'),
                 db.from('proyecto_etapas').select('*'),
+                db.from('hh_indirectas').select('*').order('anio,mes'),
             ]);
-            const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9].filter(Boolean);
+            const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10].filter(Boolean);
             if (errors.length) { console.error('Supabase load errors:', errors); }
             return {
                 projects: (projects || []).map(norm.project),
@@ -1955,6 +2203,7 @@
                 inspections: (inspections || []).map(norm.inspection),
                 etapasMaestras: (etapasMaestras || []).map(norm.etapaMaestra),
                 proyectoEtapas: (proyectoEtapas || []).map(norm.proyectoEtapa),
+                hhIndirectas: (hhIndirectas || []).map(norm.hhIndirecta),
             };
         }
 
@@ -3580,9 +3829,26 @@
             const w = state.workers.find(w => w.id === id);
             if (!w) return;
             document.getElementById('edit-w-id').value = w.id;
-            document.getElementById('edit-w-rrhh').value = w.rrhhCode;
+            document.getElementById('edit-w-rrhh').value = w.rrhhCode || '';
             document.getElementById('edit-w-name').value = w.name;
-            document.getElementById('edit-w-role').value = w.role;
+            const selectEl = document.getElementById('edit-w-role');
+            const target = (w.role || '').toLowerCase().trim();
+            let matched = false;
+            for (let i = 0; i < selectEl.options.length; i++) {
+                const optVal = selectEl.options[i].value.toLowerCase().trim();
+                if (optVal === target ||
+                    (target === 'sup' && optVal === 'supervisor') ||
+                    (target === 'bodega' && optVal === 'pañol') ||
+                    (target === 'grua' && optVal === 'grúa') ||
+                    (target === 'prevencion' && optVal === 'prevención') ||
+                    (target === 'recursos humanos' && optVal === 'rrhh') ||
+                    (target === 'jefe de proyectos' && optVal === 'jefe de proyecto')) {
+                    selectEl.selectedIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) selectEl.value = w.role;
             document.getElementById('edit-worker-modal').classList.add('active');
         };
         window.closeEditWorkerModal = () => document.getElementById('edit-worker-modal').classList.remove('active');
@@ -3761,7 +4027,7 @@
         // ════════════════════════════════════════════════════════
         // 🎨  RENDERIZADO (lee del estado local en caché)
         // ════════════════════════════════════════════════════════
-        function renderAll() { renderStageCheckboxes(); renderDashboard(); renderProjects(); renderTasks(); renderHours(); renderQualityForms(); renderReports(); renderSettings(); applyRoleUI(); }
+        function renderAll() { renderStageCheckboxes(); renderDashboard(); renderProjects(); renderTasks(); renderHours(); renderQualityForms(); renderReports(); renderSettings(); renderHHIndirectas(); renderProrrateo(); applyRoleUI(); }
 
         function renderStageCheckboxes() {
             const container = document.getElementById('project-stages-checkboxes');
@@ -4018,6 +4284,7 @@
                 const termTon = termKg / 1000;
                 const globalHhTon = termTon > 0 ? (pHh / termTon).toFixed(1) : (pHh > 0 ? '> 999' : '0.0');
                 
+                // === Prorrateo de HH Indirectas para este proyecto ===
                 const projEntries = state.timeEntries.filter(te => te.projectId === p.id);
                 const allDates = projEntries.map(e => e.work_date).sort();
                 const startDate = allDates.length > 0 ? allDates[0] : null;
@@ -4035,66 +4302,69 @@
                     endDateObj.setDate(endDateObj.getDate() + remainingDays);
                     fechaTermino = endDateObj.toISOString().split('T')[0];
                 }
-                
-                return `<div class="project-card" style="display: block;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 16px;">
-                        <div>
-                            <h3>OT ${p.otCode} - ${p.projectName}</h3>
-                            <div class="project-stats" style="margin-top: 8px;">
-                                <span>👤 ${p.clientName || 'Sin cliente'}</span>
-                                <span>⏱ HH: ${pHh.toFixed(1)} / ${window.getProjectEstimatedHh(p.id)}</span>
-                                <span>⚖️ Total Proyecto: ${Math.round(totalKg).toLocaleString('es-CL')} kg</span>
-                                <span>📅 Plazo Orig: ${p.deadline || '--'}</span>
+
+                // Calcular HH indirectas prorrateadas (acumulado de todos los meses con actividad)
+                let hhSupProj = 0, hhAdmProj = 0;
+                if (state.hhIndirectas && state.hhIndirectas.length > 0) {
+                    // Obtener los meses con actividad en este proyecto
+                    const projMonths = new Set(projEntries.map(te => `${new Date(te.work_date).getFullYear()}-${new Date(te.work_date).getMonth()+1}`));
+                    projMonths.forEach(ym => {
+                        const [yr, mo] = ym.split('-').map(Number);
+                        const totalDirectMes = state.timeEntries.filter(te => { const d = new Date(te.work_date); return d.getFullYear() === yr && d.getMonth()+1 === mo; }).reduce((s,te) => s + te.hh, 0);
+                        const projDirectMes = state.timeEntries.filter(te => te.projectId === p.id && (() => { const d = new Date(te.work_date); return d.getFullYear() === yr && d.getMonth()+1 === mo; })()).reduce((s,te) => s + te.hh, 0);
+                        const pct = totalDirectMes > 0 ? projDirectMes / totalDirectMes : 0;
+                        const supMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s,h) => s + h.cantidadHh, 0);
+                        const admMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s,h) => s + h.cantidadHh, 0);
+                        hhSupProj += supMes * pct;
+                        hhAdmProj += admMes * pct;
+                    });
+                }
+                const hhTotalProj = pHh + hhSupProj + hhAdmProj;
+
+                return `<div class="project-card" id="pcard-${p.id}">
+                    <div class="project-header-clickable" onclick="document.getElementById('pcard-${p.id}').classList.toggle('expanded')">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h3 style="margin:0 0 6px 0; font-size:16px;">OT ${p.otCode} - ${p.projectName}</h3>
+                                <div class="project-stats" style="margin-top:4px; flex-wrap: wrap; gap: 8px 16px;">
+                                    <span>👤 ${p.clientName || 'Sin cliente'}</span>
+                                    <span>⏱ HH Dir: ${pHh.toFixed(1)}${hhSupProj > 0 || hhAdmProj > 0 ? ` | Adm. Op: ${hhSupProj.toFixed(1)} | Adm: ${hhAdmProj.toFixed(1)} | <b>Total: ${hhTotalProj.toFixed(1)}</b>` : ` / ${window.getProjectEstimatedHh(p.id)}`}</span>
+                                    <span>⚖️ ${Math.round(totalKg).toLocaleString('es-CL')} kg</span>
+                                    <span>📅 Plazo: ${p.deadline || '--'}</span>
+                                </div>
                             </div>
-                        </div>
-                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                            <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; font-weight: 800; color: var(--muted);">INICIO REAL</div>
-                                <div style="font-size: 14px; font-weight: 700; color: var(--ink); margin-top: 4px;">${fechaInicio}</div>
-                            </div>
-                            <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; font-weight: 800; color: var(--muted);">TÉRMINO PROBABLE</div>
-                                <div style="font-size: 14px; font-weight: 700; color: ${fechaTermino > p.deadline ? 'var(--danger)' : 'var(--info)'}; margin-top: 4px;">${fechaTermino}</div>
-                            </div>
-                            <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; font-weight: 800; color: var(--muted);">AVANCE</div>
-                                <div style="font-size: 16px; font-weight: 800; color: ${advancePct >= 100 ? 'var(--success)' : 'var(--primary)'}; margin-top: 2px;">${advancePct}%</div>
-                            </div>
-                            <div style="text-align: center; background: #e7f4ef; padding: 8px 16px; border-radius: 6px; border: 1px solid #bce2d1;">
-                                <div style="font-size: 10px; font-weight: 800; color: #1a7b68;">KILOS TERMINADOS</div>
-                                <div style="font-size: 16px; font-weight: 800; color: #10594a; margin-top: 2px;">${Math.round(termKg).toLocaleString('es-CL')} kg</div>
-                            </div>
-                            <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; font-weight: 800; color: var(--muted);">GLOBAL HH/TON</div>
-                                <div style="font-size: 16px; font-weight: 800; color: var(--info); margin-top: 2px;">${globalHhTon}</div>
-                            </div>
-                            <div style="text-align: center; background: #fdf5e6; padding: 8px 16px; border-radius: 6px; border: 1px solid #f6dca6;">
-                                <div style="font-size: 10px; font-weight: 800; color: #b78726;">HH/TON PRESUP.</div>
-                                <div style="font-size: 16px; font-weight: 800; color: #8a6417; margin-top: 2px;">${budgetedHhTon}</div>
-                            </div>
-                            <div style="text-align: center; background: #eef2f5; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; font-weight: 800; color: var(--muted);">VELOCIDAD</div>
-                                <div style="font-size: 14px; font-weight: 700; color: var(--ink); margin-top: 4px;">${avgKgPerDay} kg/día</div>
+                            <div style="display: flex; align-items: center;">
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <div class="p-kpi"><div class="p-kpi-label">INICIO REAL</div><div class="p-kpi-val">${fechaInicio}</div></div>
+                                    <div class="p-kpi"><div class="p-kpi-label">TÉRMINO PROB.</div><div class="p-kpi-val" style="color:${fechaTermino > p.deadline ? 'var(--danger)' : 'var(--info)'}">${fechaTermino}</div></div>
+                                    <div class="p-kpi"><div class="p-kpi-label">AVANCE</div><div class="p-kpi-val" style="color:${advancePct >= 100 ? 'var(--success)' : 'var(--primary)'}">${advancePct}%</div></div>
+                                    <div class="p-kpi highlight"><div class="p-kpi-label" style="color:#1a7b68">KILOS TERM.</div><div class="p-kpi-val" style="color:#10594a">${Math.round(termKg).toLocaleString('es-CL')} kg</div></div>
+                                    <div class="p-kpi"><div class="p-kpi-label">GLOBAL HH/TON</div><div class="p-kpi-val" style="color:var(--info)">${globalHhTon}</div></div>
+                                    <div class="p-kpi warning"><div class="p-kpi-label" style="color:#b78726">HH/TON PRESUP.</div><div class="p-kpi-val" style="color:#8a6417">${budgetedHhTon}</div></div>
+                                    <div class="p-kpi"><div class="p-kpi-label">VELOCIDAD</div><div class="p-kpi-val">${avgKgPerDay} kg/día</div></div>
+                                </div>
+                                <div class="expand-icon">▼</div>
                             </div>
                         </div>
                     </div>
-                    <div class="stages-container" style="margin-top: 0;">
-                        <div class="stages-title">Rendimiento Operacional por Etapa</div>
-                        <div class="stages-grid">
-                            ${stagesHtml}
+                    <div class="project-body">
+                        <div class="stages-container" style="margin-top: 16px;">
+                            <div class="stages-title">Rendimiento Operacional por Etapa</div>
+                            <div class="stages-grid">
+                                ${stagesHtml}
+                            </div>
                         </div>
-                    </div>
                     
-                    <div style="border-top:1px solid var(--line); margin-top:16px; padding-top:16px;">
-                        <button onclick="toggleEVMChart('${p.id}')" style="background:transparent; color:var(--primary); font-weight:600; cursor:pointer; padding:6px 12px; border:1px solid var(--primary); border-radius:6px; font-size:12px; transition:all 0.2s;">📊 Ver Análisis de Valor Ganado (EVM)</button>
+                        <div style="border-top:1px solid var(--line); margin-top:16px; padding-top:16px;">
+                            <button onclick="event.stopPropagation(); toggleEVMChart('${p.id}')" style="background:transparent; color:var(--primary); font-weight:600; cursor:pointer; padding:6px 12px; border:1px solid var(--primary); border-radius:6px; font-size:12px; transition:all 0.2s;">📊 Ver Análisis de Valor Ganado (EVM)</button>
                         
-                        <div id="evm-container-${p.id}" style="display:none; margin-top:16px; padding:16px; background:#fcfcfc; border-radius:8px; border:1px solid var(--line);">
-                            <div style="display:flex; gap:16px; margin-bottom:16px;" id="evm-kpis-${p.id}"></div>
-                            <div style="height: 250px; position: relative;">
-                                <canvas id="evm-chart-${p.id}"></canvas>
+                            <div id="evm-container-${p.id}" style="display:none; margin-top:16px; padding:16px; background:#fcfcfc; border-radius:8px; border:1px solid var(--line);">
+                                <div style="display:flex; gap:16px; margin-bottom:16px;" id="evm-kpis-${p.id}"></div>
+                                <div style="height: 250px; position: relative;">
+                                    <canvas id="evm-chart-${p.id}"></canvas>
+                                </div>
                             </div>
                         </div>
-                    </div>
                     </div>
                 </div>`;
             };
@@ -4274,6 +4544,524 @@
             } else {
                 bar.style.display = 'none';
             }
+        }
+
+        // ════════════════════════════════════════════════════════
+        // 🏢  CLASIFICACIÓN DE ROLES & HH INDIRECTAS
+        // ════════════════════════════════════════════════════════
+
+        const MESES_NOMBRES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+        function getWorkerRoleCategory(role) {
+            if (!role) return 'Directa';
+            const r = role.toLowerCase().trim();
+            // HH Administrativos de Operaciones: grúa, pañol, supervisor, Prevención
+            if (r.includes('grúa') || r.includes('grua') || 
+                r.includes('pañol') || r.includes('panol') || r.includes('bodega') || 
+                r === 'supervisor' || r.includes('supervisor') || r === 'sup' || 
+                r.includes('prevención') || r.includes('prevencion')) {
+                return 'Supervisión'; // Mapeado internamente a Supervisión para compatibilidad con DB
+            }
+            // HH Administrativa: Jefe de Operaciones, RRHH, Jefe de Proyecto, Gerente
+            if (r.includes('operaciones') || r.includes('operacion') || 
+                r.includes('rrhh') || r.includes('recursos humanos') || 
+                r.includes('proyecto') || 
+                r.includes('gerente') || r.includes('admin')) {
+                return 'Administrativa';
+            }
+            return 'Directa';
+        }
+
+        function getWorkerCategoryLabel(catOrRole) {
+            const cat = (catOrRole === 'Supervisión' || catOrRole === 'Administrativa' || catOrRole === 'Directa')
+                ? catOrRole
+                : getWorkerRoleCategory(catOrRole);
+            if (cat === 'Supervisión') return 'HH Adm. Operaciones';
+            if (cat === 'Administrativa') return 'HH Administrativa';
+            return 'Mano de Obra Directa';
+        }
+
+        function getWorkerCategoryBadge(catOrRole) {
+            const cat = (catOrRole === 'Supervisión' || catOrRole === 'Administrativa' || catOrRole === 'Directa')
+                ? catOrRole
+                : getWorkerRoleCategory(catOrRole);
+            if (cat === 'Supervisión') {
+                return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#e0f2fe;color:#0369a1;">Adm. Operaciones</span>';
+            }
+            if (cat === 'Administrativa') {
+                return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#fce7f3;color:#be185d;">Administrativa</span>';
+            }
+            return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#f3f4f6;color:#4b5563;">Directa</span>';
+        }
+
+        function onHHIPeriodChange() {
+            renderHHIndirectas();
+            renderProrrateo();
+        }
+
+        async function saveSingleWorkerHH(workerId) {
+            const w = state.workers.find(w => w.id === workerId);
+            if (!w) return;
+            const anio = parseInt(document.getElementById('hhi-anio').value);
+            const mes = parseInt(document.getElementById('hhi-mes').value);
+            const inputEl = document.getElementById(`hhi-worker-input-${workerId}`);
+            const hhVal = parseFloat(inputEl ? inputEl.value.replace(',', '.') : 0);
+
+            if (!anio || !mes) {
+                alert('Selecciona año y mes válidos.');
+                return;
+            }
+
+            const tipo = getWorkerRoleCategory(w.role);
+            const nombreRol = `${w.name} (${w.role})`;
+
+            if (isNaN(hhVal) || hhVal < 0) {
+                alert('Ingresa una cantidad de HH válida (número mayor o igual a 0).');
+                return;
+            }
+
+            if (hhVal === 0) {
+                const existing = state.hhIndirectas.find(h => h.anio === anio && h.mes === mes && h.tipo === tipo && (h.nombreRol === nombreRol || h.nombreRol.startsWith(w.name)));
+                if (existing) {
+                    await db.from('hh_indirectas').delete().eq('id', existing.id);
+                    state.hhIndirectas = state.hhIndirectas.filter(h => h.id !== existing.id);
+                }
+            } else {
+                const { data, error } = await db.from('hh_indirectas').upsert({
+                    anio, mes, tipo, nombre_rol: nombreRol, cantidad_hh: hhVal
+                }, { onConflict: 'anio,mes,tipo,nombre_rol' }).select();
+
+                if (error) { alert('Error al guardar: ' + error.message); return; }
+
+                if (data && data.length > 0) {
+                    const newEntry = norm.hhIndirecta(data[0]);
+                    const existingIdx = state.hhIndirectas.findIndex(h => h.id === newEntry.id);
+                    if (existingIdx >= 0) state.hhIndirectas[existingIdx] = newEntry;
+                    else state.hhIndirectas.push(newEntry);
+                }
+            }
+
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+        }
+
+        async function clearWorkerHH(workerId) {
+            const w = state.workers.find(w => w.id === workerId);
+            if (!w) return;
+            const anio = parseInt(document.getElementById('hhi-anio').value);
+            const mes = parseInt(document.getElementById('hhi-mes').value);
+            const existing = state.hhIndirectas.find(h => 
+                h.anio === anio && h.mes === mes && 
+                (h.nombreRol.startsWith(w.name) || h.nombreRol.includes(w.name))
+            );
+            if (!existing) {
+                const inputEl = document.getElementById(`hhi-worker-input-${w.id}`);
+                if (inputEl) inputEl.value = '';
+                return;
+            }
+            if (!confirm(`¿Eliminar las horas registradas para ${w.name} en ${MESES_NOMBRES[mes]} ${anio}?`)) return;
+            const { error } = await db.from('hh_indirectas').delete().eq('id', existing.id);
+            if (error) { alert('Error al eliminar: ' + error.message); return; }
+            state.hhIndirectas = state.hhIndirectas.filter(h => h.id !== existing.id);
+            const inputEl = document.getElementById(`hhi-worker-input-${w.id}`);
+            if (inputEl) inputEl.value = '';
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+        }
+
+        async function saveAllIndirectWorkersHH() {
+            const anio = parseInt(document.getElementById('hhi-anio').value);
+            const mes = parseInt(document.getElementById('hhi-mes').value);
+            if (!anio || !mes) { alert('Selecciona año y mes.'); return; }
+
+            const indirectWorkers = state.workers.filter(w => w.active && getWorkerRoleCategory(w.role) !== 'Directa');
+            if (indirectWorkers.length === 0) {
+                alert('No hay trabajadores registrados en roles de Operaciones o Administración.');
+                return;
+            }
+
+            let savedCount = 0;
+            for (const w of indirectWorkers) {
+                const inputEl = document.getElementById(`hhi-worker-input-${w.id}`);
+                if (!inputEl) continue;
+                const rawVal = inputEl.value.trim().replace(',', '.');
+                const hhVal = parseFloat(rawVal);
+                const tipo = getWorkerRoleCategory(w.role);
+                const nombreRol = `${w.name} (${w.role})`;
+
+                if (!isNaN(hhVal) && hhVal > 0) {
+                    const { data, error } = await db.from('hh_indirectas').upsert({
+                        anio, mes, tipo, nombre_rol: nombreRol, cantidad_hh: hhVal
+                    }, { onConflict: 'anio,mes,tipo,nombre_rol' }).select();
+
+                    if (!error && data && data.length > 0) {
+                        const newEntry = norm.hhIndirecta(data[0]);
+                        const existingIdx = state.hhIndirectas.findIndex(h => h.id === newEntry.id);
+                        if (existingIdx >= 0) state.hhIndirectas[existingIdx] = newEntry;
+                        else state.hhIndirectas.push(newEntry);
+                        savedCount++;
+                    }
+                } else if (rawVal === '0') {
+                    const existing = state.hhIndirectas.find(h => h.anio === anio && h.mes === mes && h.tipo === tipo && (h.nombreRol === nombreRol || h.nombreRol.startsWith(w.name)));
+                    if (existing) {
+                        await db.from('hh_indirectas').delete().eq('id', existing.id);
+                        state.hhIndirectas = state.hhIndirectas.filter(h => h.id !== existing.id);
+                    }
+                }
+            }
+
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+            alert(`✅ Planilla de ${MESES_NOMBRES[mes]} ${anio} guardada correctamente.`);
+        }
+
+        function onManualTipoChange() {
+            const tipoEl = document.getElementById('hhi-manual-tipo');
+            const tipo = tipoEl ? tipoEl.value : 'Supervisión';
+            const rolSelect = document.getElementById('hhi-manual-rol');
+            if (!rolSelect) return;
+            if (tipo === 'Supervisión') {
+                rolSelect.innerHTML = `
+                    <option value="Grúa">Grúa</option>
+                    <option value="Pañol">Pañol</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="Prevención">Prevención</option>
+                `;
+            } else {
+                rolSelect.innerHTML = `
+                    <option value="Jefe de Operaciones">Jefe de Operaciones</option>
+                    <option value="RRHH">RRHH</option>
+                    <option value="Jefe de Proyecto">Jefe de Proyecto</option>
+                    <option value="Gerente">Gerente</option>
+                `;
+            }
+        }
+
+        async function addManualHHIndirecta() {
+            const anio = parseInt(document.getElementById('hhi-anio').value);
+            const mes = parseInt(document.getElementById('hhi-mes').value);
+            const tipo = document.getElementById('hhi-manual-tipo').value;
+            const nombre = document.getElementById('hhi-manual-nombre').value.trim();
+            const rolSelect = document.getElementById('hhi-manual-rol');
+            const rol = rolSelect ? rolSelect.value : '';
+            const cantidadHh = parseFloat(document.getElementById('hhi-manual-cantidad').value.replace(',', '.'));
+            const addWorkerCheck = document.getElementById('hhi-manual-add-worker');
+
+            if (!anio || !mes) {
+                alert('Selecciona un período válido (Año y Mes).');
+                return;
+            }
+            if (!nombre) {
+                alert('Ingresa el nombre o razón social del colaborador/proveedor.');
+                document.getElementById('hhi-manual-nombre').focus();
+                return;
+            }
+            if (!rol) {
+                alert('Selecciona el rol correspondiente.');
+                return;
+            }
+            if (isNaN(cantidadHh) || cantidadHh <= 0) {
+                alert('Ingresa una cantidad válida de HH trabajadas (mayor a 0).');
+                document.getElementById('hhi-manual-cantidad').focus();
+                return;
+            }
+
+            const nombreRol = `${nombre} (${rol})`;
+
+            const { data, error } = await db.from('hh_indirectas').upsert({
+                anio, mes, tipo, nombre_rol: nombreRol, cantidad_hh: cantidadHh
+            }, { onConflict: 'anio,mes,tipo,nombre_rol' }).select();
+
+            if (error) { alert('Error al guardar: ' + error.message); return; }
+
+            if (data && data.length > 0) {
+                const newEntry = norm.hhIndirecta(data[0]);
+                const existingIdx = state.hhIndirectas.findIndex(h => h.id === newEntry.id);
+                if (existingIdx >= 0) state.hhIndirectas[existingIdx] = newEntry;
+                else state.hhIndirectas.push(newEntry);
+            }
+
+            // Opcional: Agregar como trabajador permanente si se marcó la casilla
+            if (addWorkerCheck && addWorkerCheck.checked) {
+                const existingWorker = state.workers.find(w => w.name.toLowerCase() === nombre.toLowerCase());
+                if (!existingWorker) {
+                    try {
+                        const newWorker = {
+                            id: crypto.randomUUID(),
+                            rrhhCode: 'IND-' + Math.floor(100 + Math.random() * 900),
+                            name: nombre,
+                            role: rol,
+                            active: true
+                        };
+                        const saved = await dbInsertWorker(newWorker);
+                        state.workers.push(saved);
+                    } catch (err) {
+                        console.warn('No se pudo guardar como trabajador permanente:', err);
+                    }
+                }
+            }
+
+            document.getElementById('hhi-manual-nombre').value = '';
+            document.getElementById('hhi-manual-cantidad').value = '';
+            if (addWorkerCheck) addWorkerCheck.checked = false;
+
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+            alert(`✅ Registradas ${cantidadHh} HH para "${nombreRol}" en ${MESES_NOMBRES[mes]} ${anio}.`);
+        }
+
+        async function editHHIndirecta(id) {
+            const h = state.hhIndirectas.find(item => item.id === id);
+            if (!h) return;
+            const newHh = prompt(`✏️ Editar horas para "${h.nombreRol}":\nIngresa el nuevo total de HH trabajadas en el mes:`, h.cantidadHh);
+            if (newHh === null) return;
+            const parsed = parseFloat(newHh.replace(',', '.'));
+            if (isNaN(parsed) || parsed < 0) {
+                alert('❌ Ingresa una cantidad válida de HH.');
+                return;
+            }
+            if (parsed === 0) {
+                if (confirm(`¿Deseas eliminar el registro de "${h.nombreRol}"?`)) {
+                    await deleteHHIndirecta(id);
+                }
+                return;
+            }
+            const { error } = await db.from('hh_indirectas').update({ cantidad_hh: parsed }).eq('id', id);
+            if (error) { alert('Error al actualizar: ' + error.message); return; }
+            h.cantidadHh = parsed;
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+        }
+
+        async function deleteHHIndirecta(id) {
+            const h = state.hhIndirectas.find(item => item.id === id);
+            const name = h ? h.nombreRol : 'este registro';
+            if (!confirm(`¿Estás seguro de eliminar el registro de HH de "${name}"?`)) return;
+            const { error } = await db.from('hh_indirectas').delete().eq('id', id);
+            if (error) { alert('Error al eliminar: ' + error.message); return; }
+            state.hhIndirectas = state.hhIndirectas.filter(item => item.id !== id);
+            renderHHIndirectas();
+            renderProrrateo();
+            renderDashboard();
+        }
+
+        function renderHHIndirectas() {
+            if (!state.hhIndirectas) state.hhIndirectas = [];
+            if (!state.workers) state.workers = [];
+
+            const now = new Date();
+            const anioInput = document.getElementById('hhi-anio');
+            if (anioInput && !anioInput.value) anioInput.value = now.getFullYear();
+            const mesSelect = document.getElementById('hhi-mes');
+            if (mesSelect && !mesSelect.dataset.initialized) {
+                mesSelect.value = String(now.getMonth() + 1);
+                mesSelect.dataset.initialized = 'true';
+            }
+
+            // Asegurar que el select dinámico de roles manuales esté poblado
+            const rolSelect = document.getElementById('hhi-manual-rol');
+            if (rolSelect && rolSelect.children.length === 0) {
+                onManualTipoChange();
+            }
+
+            const selectedAnio = parseInt(anioInput ? anioInput.value : now.getFullYear());
+            const selectedMes = parseInt(mesSelect ? mesSelect.value : now.getMonth() + 1);
+
+            // 1. Render Planilla de Trabajadores Indirectos
+            const indirectWorkers = state.workers.filter(w => w.active && getWorkerRoleCategory(w.role) !== 'Directa');
+            const sheetTbody = document.getElementById('hhi-workers-sheet-body');
+
+            if (sheetTbody) {
+                if (indirectWorkers.length === 0) {
+                    sheetTbody.innerHTML = `<tr>
+                        <td colspan="7" style="text-align:center; padding: 20px; color: var(--muted);">
+                            ℹ️ No hay trabajadores registrados con roles de <strong>HH Administrativos de Operaciones</strong> o <strong>HH Administrativa</strong>.<br>
+                            <span style="font-size:12px;">Puedes agregarlos arriba directamente con la casilla de rol o en <strong>Configuración → Gestión de Trabajadores</strong> con roles: Grúa, Pañol, Supervisor, Prevención, Jefe de Operaciones, RRHH, Jefe de Proyecto o Gerente.</span>
+                        </td>
+                    </tr>`;
+                } else {
+                    sheetTbody.innerHTML = indirectWorkers.map(w => {
+                        const cat = getWorkerRoleCategory(w.role);
+                        const catBadge = getWorkerCategoryBadge(cat);
+
+                        // Buscar registro en este mes
+                        const entry = state.hhIndirectas.find(h => 
+                            h.anio === selectedAnio && 
+                            h.mes === selectedMes && 
+                            h.tipo === cat && 
+                            (h.nombreRol.startsWith(w.name) || h.nombreRol.includes(w.name))
+                        );
+
+                        const currentHh = entry ? entry.cantidadHh : '';
+                        const statusBadge = entry 
+                            ? `<span style="display:inline-flex; align-items:center; gap:4px; color:#15803d; font-size:12px; font-weight:700;">✅ Registrado (${entry.cantidadHh.toFixed(1)} HH)</span>` 
+                            : `<span style="color:var(--muted); font-size:12px;">Pendiente</span>`;
+
+                        const actionBtns = `
+                            <div style="display:flex; gap:6px; align-items:center;">
+                                <button class="primary" onclick="saveSingleWorkerHH('${w.id}')" style="padding: 5px 10px; font-size: 11px; font-weight: 700;" title="Guardar / Actualizar horas">
+                                    💾 ${entry ? 'Actualizar' : 'Guardar'}
+                                </button>
+                                ${entry ? `<button onclick="clearWorkerHH('${w.id}')" style="padding: 5px 10px; font-size: 11px; background:#fee2e2; color:#b91c1c; border:1px solid #f87171; border-radius:4px; cursor:pointer; font-weight: 700;" title="Borrar horas de este mes">🗑️ Borrar</button>` : ''}
+                            </div>
+                        `;
+
+                        return `<tr>
+                            <td style="font-family:monospace; font-size:12px;">${w.rrhhCode || '-'}</td>
+                            <td>
+                                <strong>${w.name}</strong>
+                                <button onclick="openEditWorkerModal('${w.id}')" style="border:none;background:transparent;cursor:pointer;font-size:13px;margin-left:4px;" title="Editar perfil de trabajador">✏️</button>
+                            </td>
+                            <td>${w.role}</td>
+                            <td>${catBadge}</td>
+                            <td>
+                                <input type="number" id="hhi-worker-input-${w.id}" min="0" step="0.5" 
+                                    value="${currentHh !== '' ? currentHh : ''}" 
+                                    placeholder="0.0" 
+                                    style="width: 100px; padding: 6px 10px; font-weight: 700; border-radius: 4px; border: 1px solid var(--line);">
+                            </td>
+                            <td>${statusBadge}</td>
+                            <td>${actionBtns}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+
+            // 2. Render Registros en Base de Datos para el Mes Seleccionado
+            const recordsThisMonth = state.hhIndirectas.filter(h => h.anio === selectedAnio && h.mes === selectedMes);
+            const tbody = document.getElementById('hhi-table-body');
+            if (tbody) {
+                if (recordsThisMonth.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="color: var(--muted); text-align: center; padding: 14px;">Sin registros para ${MESES_NOMBRES[selectedMes]} ${selectedAnio}</td></tr>`;
+                } else {
+                    tbody.innerHTML = recordsThisMonth.map(h => {
+                        const badge = getWorkerCategoryBadge(h.tipo);
+                        return `<tr>
+                            <td>${h.anio}</td>
+                            <td>${MESES_NOMBRES[h.mes]}</td>
+                            <td>${badge}</td>
+                            <td style="font-weight:600;">${h.nombreRol}</td>
+                            <td style="font-weight:700;">${h.cantidadHh.toFixed(1)}</td>
+                            <td>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                    <button onclick="editHHIndirecta('${h.id}')" style="padding:5px 12px; font-size:11px; background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc; border-radius:4px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; gap:4px;" title="Editar horas de este registro">✏️ Editar</button>
+                                    <button onclick="deleteHHIndirecta('${h.id}')" style="padding:5px 12px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #f87171; border-radius:4px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; gap:4px;" title="Eliminar registro">🗑️ Borrar</button>
+                                </div>
+                            </td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+
+            // 3. Totales del Mes
+            const supTotal = recordsThisMonth.filter(h => h.tipo === 'Supervisión').reduce((s, h) => s + h.cantidadHh, 0);
+            const admTotal = recordsThisMonth.filter(h => h.tipo === 'Administrativa').reduce((s, h) => s + h.cantidadHh, 0);
+            const grandTotal = supTotal + admTotal;
+
+            const supBadge = document.getElementById('hhi-sup-badge');
+            if (supBadge) supBadge.textContent = `Adm. Operaciones: ${supTotal.toFixed(1)} HH`;
+            const admBadge = document.getElementById('hhi-adm-badge');
+            if (admBadge) admBadge.textContent = `Administrativa: ${admTotal.toFixed(1)} HH`;
+            const totalBadge = document.getElementById('hhi-total-badge');
+            if (totalBadge) totalBadge.textContent = `Total Mes: ${grandTotal.toFixed(1)} HH`;
+        }
+
+        function renderProrrateo() {
+            if (!state.hhIndirectas) state.hhIndirectas = [];
+            
+            // Populate month select
+            const mesSelect = document.getElementById('hhi-prorrateo-mes');
+            if (!mesSelect) return;
+            
+            const anioInput = document.getElementById('hhi-anio');
+            const hhiMesSelect = document.getElementById('hhi-mes');
+            const now = new Date();
+            const activePeriod = `${anioInput ? anioInput.value : now.getFullYear()}-${hhiMesSelect ? hhiMesSelect.value : now.getMonth() + 1}`;
+
+            const months = [...new Set(state.hhIndirectas.map(h => `${h.anio}-${h.mes}`))];
+            if (!months.includes(activePeriod)) months.push(activePeriod);
+            months.sort().reverse();
+
+            const currentVal = mesSelect.value || activePeriod;
+            mesSelect.innerHTML = months.map(m => {
+                const [y, mo] = m.split('-');
+                return `<option value="${m}" ${m === currentVal ? 'selected' : ''}>${MESES_NOMBRES[parseInt(mo)]} ${y}</option>`;
+            }).join('');
+            if (!mesSelect.value) mesSelect.value = currentVal;
+
+            const tbody = document.getElementById('hhi-prorrateo-body');
+            if (!tbody) return;
+
+            const selectedMonth = mesSelect.value;
+            if (!selectedMonth) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center;">Seleccione un mes</td></tr>';
+                return;
+            }
+
+            const [yr, mo] = selectedMonth.split('-').map(Number);
+            
+            // Get total direct HH for this month across all projects
+            const entriesThisMonth = state.timeEntries.filter(te => {
+                const d = new Date(te.work_date);
+                return d.getFullYear() === yr && d.getMonth() + 1 === mo;
+            });
+            const totalDirectHH = entriesThisMonth.reduce((s, te) => s + te.hh, 0);
+
+            // Get indirect HH for this month
+            const supHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s, h) => s + h.cantidadHh, 0);
+            const admHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s, h) => s + h.cantidadHh, 0);
+
+            // Get projects with HH in this month
+            const projectIds = [...new Set(entriesThisMonth.map(te => te.projectId))];
+            
+            if (projectIds.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center;">No hay HH directas registradas en este mes</td></tr>';
+                return;
+            }
+
+            let rows = '';
+            let totals = { direct: 0, sup: 0, adm: 0, total: 0 };
+
+            projectIds.forEach(pid => {
+                const proj = state.projects.find(p => p.id === pid);
+                if (!proj) return;
+                const projDirect = entriesThisMonth.filter(te => te.projectId === pid).reduce((s, te) => s + te.hh, 0);
+                const pct = totalDirectHH > 0 ? projDirect / totalDirectHH : 0;
+                const projSup = supHH * pct;
+                const projAdm = admHH * pct;
+                const projTotal = projDirect + projSup + projAdm;
+                
+                totals.direct += projDirect;
+                totals.sup += projSup;
+                totals.adm += projAdm;
+                totals.total += projTotal;
+
+                rows += `<tr>
+                    <td style="font-weight:600;">OT ${proj.otCode} - ${proj.projectName}</td>
+                    <td>${projDirect.toFixed(1)}</td>
+                    <td>${(pct * 100).toFixed(1)}%</td>
+                    <td style="color:#0369a1; font-weight:600;">${projSup.toFixed(1)}</td>
+                    <td style="color:#be185d; font-weight:600;">${projAdm.toFixed(1)}</td>
+                    <td style="font-weight:800; color:var(--primary);">${projTotal.toFixed(1)}</td>
+                </tr>`;
+            });
+
+            // Add totals row
+            rows += `<tr style="background:#f0f0f0; font-weight:800; border-top:2px solid var(--line);">
+                <td>TOTALES</td>
+                <td>${totals.direct.toFixed(1)}</td>
+                <td>100%</td>
+                <td style="color:#0369a1;">${totals.sup.toFixed(1)}</td>
+                <td style="color:#be185d;">${totals.adm.toFixed(1)}</td>
+                <td style="color:var(--primary);">${totals.total.toFixed(1)}</td>
+            </tr>`;
+
+            tbody.innerHTML = rows;
         }
 
         function renderTasks() {
@@ -4762,6 +5550,8 @@
         function renderSettings() {
             document.getElementById("workers-table").innerHTML = state.workers.map(w => {
                 const isRead = isReadOnly();
+                const catBadge = getWorkerCategoryBadge(w.role);
+
                 const actionBtns = !isRead ? `
                 <div style="display:flex;gap:4px;">
                     <button onclick="openEditWorkerModal('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;" title="Editar">✏️ Editar</button>
@@ -4769,7 +5559,7 @@
                     <button onclick="deleteWorker('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;" title="Eliminar">🗑️</button>
                 </div>
             ` : '<span style="color:var(--muted);font-size:12px;">—</span>';
-                return `<tr><td>${w.rrhhCode}</td><td>${w.name}</td><td>${w.role}</td><td><span class="status ${w.active ? 'ok' : 'bad'}">${w.active ? 'Activo' : 'Inactivo'}</span></td><td>${actionBtns}</td></tr>`;
+                return `<tr><td>${w.rrhhCode || '-'}</td><td><strong>${w.name}</strong></td><td>${w.role}</td><td>${catBadge}</td><td><span class="status ${w.active ? 'ok' : 'bad'}">${w.active ? 'Activo' : 'Inactivo'}</span></td><td>${actionBtns}</td></tr>`;
             }).join('');
             if (currentRole === 'Admin') { renderUsersTable(); }
         }
