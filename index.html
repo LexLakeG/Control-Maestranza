@@ -1787,9 +1787,12 @@
                     <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
                         Las HH indirectas se distribuyen proporcionalmente según las HH directas consumidas por cada proyecto en el mes seleccionado.
                     </p>
-                    <div style="margin-bottom: 14px;">
+                    <div style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
                         <label style="font-size: 13px; font-weight: 700;">Mes a visualizar:
                             <select id="hhi-prorrateo-mes" onchange="renderProrrateo()" style="padding: 4px 8px; margin-left: 6px; border-radius: 4px; border: 1px solid var(--line);"></select>
+                        </label>
+                        <label style="font-size: 12px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none;">
+                            <input type="checkbox" id="hhi-show-all-ot" onchange="renderProrrateo()"> Mostrar todas las OT registradas (incluso sin vigencia en el mes)
                         </label>
                     </div>
                     <div class="table-wrap">
@@ -2482,7 +2485,14 @@
         }
         async function dbDeleteWorker(id) {
             const { error } = await db.from('workers').delete().eq('id', id);
-            if (error) { alert('Error al eliminar trabajador: ' + error.message); throw error; }
+            if (error) {
+                if (error.code === '23503' || (error.message && error.message.includes('foreign key constraint'))) {
+                    alert('⚠️ No es posible eliminar al trabajador porque tiene registros históricos de horas asociadas en tareas o proyectos.\n\nPara darlo de baja del sistema sin alterar los reportes y costos históricos, utiliza la opción "Desactivar".');
+                } else {
+                    alert('Error al eliminar trabajador: ' + error.message);
+                }
+                throw error;
+            }
         }
 
         // --- Inspecciones ---
@@ -2601,6 +2611,23 @@
             updateUserBadge(currentUserName, currentRole);
             try {
                 state = await loadState();
+                // 🧹 AUTO-CORRECCIÓN: Corregir registros de HH marcados indebidamente como retrabajo
+                const falseReworkEntries = state.timeEntries.filter(te => {
+                    if (!te.is_rework) return false;
+                    const task = state.tasks.find(t => t.id === te.taskId);
+                    if (!task) return false;
+                    const isRealRework = Boolean(task.isRework || task.process === 'Retrabajo' || /-R-\d{2}/.test(task.code));
+                    return !isRealRework;
+                });
+                if (falseReworkEntries.length > 0) {
+                    console.log(`Corrigiendo ${falseReworkEntries.length} entradas de tiempo falsamente clasificadas como retrabajo...`);
+                    const idsToFix = falseReworkEntries.map(e => e.id);
+                    falseReworkEntries.forEach(e => { e.is_rework = false; });
+                    db.from('time_entries').update({ is_rework: false }).in('id', idsToFix).then(({ error }) => {
+                        if (error) console.error('Error al regularizar time_entries de retrabajo en DB:', error);
+                        else console.log('✅ Entradas de tiempo regularizadas con éxito en DB.');
+                    });
+                }
             } catch (err) {
                 console.error('Error cargando estado:', err);
             }
@@ -3234,8 +3261,87 @@
         }
 
         // ════════════════════════════════════════════════════════
-        // ☐  LÓGICA DE TAREAS
+        // ⏱️ UTILIDADES DE FECHA Y PROYECTO
         // ════════════════════════════════════════════════════════
+        function isWorkDateInMonth(dateStr, yr, mo) {
+            if (!dateStr) return false;
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length < 2) return false;
+            return parseInt(parts[0], 10) === yr && parseInt(parts[1], 10) === mo;
+        }
+
+        function getEntryProjectId(te) {
+            if (!te) return null;
+            if (te.projectId) return te.projectId;
+            if (te.taskId && state && state.tasks) {
+                const t = state.tasks.find(x => x.id === te.taskId);
+                if (t && t.projectId) return t.projectId;
+            }
+            return null;
+        }
+
+        // ════════════════════════════════════════════════════════
+        // ☐  LÓGICA DE ETAPAS Y TAREAS DINÁMICAS
+        // ════════════════════════════════════════════════════════
+        function normalizeStageText(str) {
+            if (!str) return '';
+            return str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
+
+        function isTaskMatchingStage(taskProcess, stageName, projectStageNames = []) {
+            if (!taskProcess || !stageName) return false;
+            const normTask = normalizeStageText(taskProcess);
+            const normStage = normalizeStageText(stageName);
+
+            // 1. Coincidencia exacta sin tildes/espacios/mayúsculas
+            if (normTask === normStage) return true;
+
+            // 2. Coincidencia por inclusión (ej: "Reparación" o "Reparación de Rack" dentro de "Reparación de Rack de congelado")
+            if (normStage.includes(normTask) || normTask.includes(normStage)) {
+                const otherExact = projectStageNames.some(s => s !== stageName && normalizeStageText(s) === normTask);
+                if (!otherExact) return true;
+            }
+
+            // 3. Fallback para nombres genéricos/heredados cuando la OT tiene etapas personalizadas
+            const hasExactStageForTask = projectStageNames.some(s => normalizeStageText(s) === normTask);
+            if (!hasExactStageForTask && projectStageNames.length > 0) {
+                const isPaintTask = normTask.includes('pintur');
+                const isPaintStage = normStage.includes('pintur');
+                if (isPaintTask && isPaintStage) return true;
+                if (!isPaintTask && !isPaintStage) {
+                    const nonPaintStages = projectStageNames.filter(s => !normalizeStageText(s).includes('pintur'));
+                    if (nonPaintStages.length === 1 && nonPaintStages[0] === stageName) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function getProjectActiveStages(projectId) {
+            const projectStages = (state.proyectoEtapas || []).filter(pe => pe.projectId === projectId);
+            if (projectStages.length > 0 && state.etapasMaestras && state.etapasMaestras.length > 0) {
+                const mapped = projectStages.map(pe => {
+                    const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
+                    return {
+                        id: pe.etapaId,
+                        name: em ? em.nombre : '',
+                        orden: em?.orden || 0,
+                        colorCss: em?.colorCss || '',
+                        peso: parseFloat(pe.peso) || (100 / projectStages.length)
+                    };
+                }).filter(s => s.name).sort((a, b) => a.orden - b.orden);
+                if (mapped.length > 0) return mapped;
+            }
+            return [
+                { id: 'prep', name: 'Preparación', orden: 1, colorCss: 'var(--primary)', peso: 35 },
+                { id: 'armado', name: 'Armado', orden: 2, colorCss: 'var(--info)', peso: 25 },
+                { id: 'sold', name: 'Soldadura', orden: 3, colorCss: 'var(--accent)', peso: 25 },
+                { id: 'term', name: 'Terminación', orden: 4, colorCss: '#8a3330', peso: 15 }
+            ];
+        }
+
         const processSelect = document.getElementById('task-process-select');
         const elementCheckboxes = document.getElementById('element-checkboxes');
         const partLabel = document.getElementById('part-label');
@@ -3337,7 +3443,7 @@
             const project = state.projects.find(p => p.id === projectId); if (!project) return;
             const instructions = form.get("instructions"); const createdAt = new Date().toISOString(); const csvVersion = project.csvVersion || 0;
             const createTaskObj = (elId, partId, qty, code) => ({ id: crypto.randomUUID(), projectId, code, process, workerIds: selectedWorkers, elementId: elId, partId, quantity: qty, status: "Activa", instructions, csvVersion, csvWarning: false, isRework: false, createdAt });
-            const processOrder = ['Preparación', 'Armado', 'Soldadura', 'Terminación'];
+            const processOrder = Array.from(processSelect.options).map(o => o.value);
             const currentProcessIndex = processOrder.indexOf(process);
 
             // ⚡ Preparar array de tareas para bulk insert
@@ -3493,41 +3599,45 @@
         // 🏷️  MEJORAS 6+7 — ESTADO DE CONJUNTO CALCULADO DESDE TAREAS
         // ════════════════════════════════════════════════════════
         function computeElementStatus(elementId) {
-            const processOrder = ['Preparación', 'Armado', 'Soldadura', 'Terminación'];
             const el = state.elements.find(e => e.id === elementId);
             if (!el) return 'Sin iniciar';
 
-            // Verificar qué procesos tienen tareas terminadas
-            const terminatedProcesses = new Set(
-                state.tasks
-                    .filter(t => t.elementId === elementId && t.status === 'Terminada' && !t.isRework)
-                    .map(t => t.process)
-            );
-            // Verificar qué procesos tienen tareas activas
-            const activeProcesses = new Set(
-                state.tasks
-                    .filter(t => t.elementId === elementId && t.status === 'Activa' && !t.isRework)
-                    .map(t => t.process)
-            );
+            const stages = getProjectActiveStages(el.projectId);
+            const stageNames = stages.map(s => s.name);
+            const elTasks = state.tasks.filter(t => t.elementId === elementId && !t.isRework);
+            const termTasks = elTasks.filter(t => t.status === 'Terminada');
+            const activeTasks = elTasks.filter(t => t.status === 'Activa');
 
-            // Determinar el estado más avanzado
-            // Terminado completo: si Armado + Soldadura + Terminación están terminadas
-            // (Preparación es opcional para el estado de conjunto)
-            if (terminatedProcesses.has('Terminación') &&
-                terminatedProcesses.has('Soldadura') &&
-                terminatedProcesses.has('Armado')) {
-                // Verificar que la cantidad terminada == cantidad del conjunto
-                const termQty = state.tasks
-                    .filter(t => t.elementId === elementId && t.process === 'Terminación' && t.status === 'Terminada')
-                    .reduce((s, t) => s + t.quantity, 0);
-                if (termQty >= el.quantity) return 'Terminado';
+            if (!stages.length || !elTasks.length) return 'Sin iniciar';
+
+            const lastStage = stages[stages.length - 1];
+
+            // 1. ¿Está Terminado al 100%?
+            // Si la última etapa activa del proyecto tiene tareas terminadas con cantidad >= el.quantity
+            const lastStageQty = termTasks
+                .filter(t => isTaskMatchingStage(t.process, lastStage.name, stageNames))
+                .reduce((s, t) => s + t.quantity, 0);
+
+            if (lastStageQty >= el.quantity) {
+                return 'Terminado';
             }
 
-            // Proceso más avanzado con actividad
-            if (activeProcesses.has('Terminación') || terminatedProcesses.has('Terminación')) return 'En Limpieza';
-            if (activeProcesses.has('Soldadura') || terminatedProcesses.has('Soldadura')) return 'En Soldadura';
-            if (activeProcesses.has('Armado') || terminatedProcesses.has('Armado')) return 'En Armado';
-            if (activeProcesses.has('Preparación') || terminatedProcesses.has('Preparación')) return 'En Preparación';
+            // 2. Evaluar de la etapa más avanzada a la inicial
+            for (let i = stages.length - 1; i >= 0; i--) {
+                const st = stages[i];
+                const stageTermQty = termTasks
+                    .filter(t => isTaskMatchingStage(t.process, st.name, stageNames))
+                    .reduce((s, t) => s + t.quantity, 0);
+                const hasActive = activeTasks.some(t => isTaskMatchingStage(t.process, st.name, stageNames));
+
+                if (stageTermQty >= el.quantity && i < stages.length - 1) {
+                    return `Listo para ${stages[i + 1].name}`;
+                }
+                if (hasActive || stageTermQty > 0) {
+                    return `En ${st.name}`;
+                }
+            }
+
             return 'Sin iniciar';
         }
 
@@ -3542,8 +3652,18 @@
         };
 
         function elementStatusBadge(status) {
-            const c = PROCESS_STATUS_COLORS[status] || { bg: '#eef2f5', color: '#6f7b88' };
-            return `<span style="background:${c.bg};color:${c.color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;">${status}</span>`;
+            let bg = '#eef2f5', color = '#6f7b88';
+            if (status === 'Terminado') {
+                bg = '#d1fae5'; color = '#065f46';
+            } else if (status.startsWith('Listo para')) {
+                bg = '#e0f2fe'; color = '#0369a1';
+            } else if (status.startsWith('En ')) {
+                bg = '#fef3c7'; color = '#92400e';
+            } else if (PROCESS_STATUS_COLORS[status]) {
+                bg = PROCESS_STATUS_COLORS[status].bg;
+                color = PROCESS_STATUS_COLORS[status].color;
+            }
+            return `<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;">${status}</span>`;
         }
         window.confirmCloseTask = async () => {
             if (!taskToCloseId) return;
@@ -3556,7 +3676,8 @@
             try {
                 for (const input of inputs) {
                     const hh = parseFloat(input.value);
-                    const entry = { id: crypto.randomUUID(), taskId: task.id, workerId: input.dataset.workerId, projectId: task.projectId, work_date: today, hh, is_rework: task.code.includes('-R'), validated: true };
+                    const isReworkTask = Boolean(task.isRework || task.process === 'Retrabajo' || /-R-\d{2}/.test(task.code));
+                    const entry = { id: crypto.randomUUID(), taskId: task.id, workerId: input.dataset.workerId, projectId: task.projectId, work_date: today, hh, is_rework: isReworkTask, validated: true };
                     const saved = await dbInsertTimeEntry(entry);
                     state.timeEntries.push(saved);
                 }
@@ -3870,14 +3991,38 @@
         });
 
         window.deleteWorker = async (id) => {
-            if (currentRole !== 'Admin' && currentRole !== 'Supervisor') { alert('⛔ Solo Admin o Supervisor puede eliminar trabajadores.'); return; }
+            if (currentRole !== 'Admin' && currentRole !== 'Supervisor') { 
+                alert('⛔ Solo Admin o Supervisor puede eliminar trabajadores.'); 
+                return; 
+            }
             const w = state.workers.find(w => w.id === id);
             if (!w) return;
-            if (confirm(`¿Seguro que deseas eliminar al trabajador ${w.name}?\nEsta acción no se puede deshacer.\n\nNota: Si el trabajador tiene horas registradas en tareas, la base de datos podría impedir su eliminación. En ese caso es mejor Desactivarlo.`)) {
+
+            // Verificar si el trabajador tiene horas registradas en time_entries
+            const entries = (state.timeEntries || []).filter(te => te.workerId === id || te.worker_id === id);
+            if (entries.length > 0) {
+                const totalHh = entries.reduce((acc, te) => acc + (te.hh || 0), 0);
+                const shouldDeactivate = confirm(
+                    `⚠️ No se puede eliminar a "${w.name}" porque tiene ${entries.length} registro(s) de horas trabajadas (${totalHh.toFixed(1)} HH en total) asociadas en tareas de proyectos.\n\n` +
+                    `Eliminarlo de la base de datos corrompería los costos y reportes históricos de las OT.\n\n` +
+                    `👉 La alternativa correcta es DESACTIVARLO. Al desactivarlo, ya no aparecerá en las listas de tareas activas ni en el registro diario de HH, pero sus horas históricas se mantendrán seguras.\n\n` +
+                    (w.active ? `¿Deseas DESACTIVAR a "${w.name}" en este momento?` : `El trabajador ya se encuentra Inactivo.`)
+                );
+                if (shouldDeactivate && w.active) {
+                    await toggleWorker(id);
+                }
+                return;
+            }
+
+            // Si no tiene horas registradas, confirmar eliminación física
+            if (confirm(`¿Seguro que deseas eliminar definitivamente al trabajador "${w.name}"?\nEsta acción no se puede deshacer.`)) {
                 try {
+                    // Desvincular de posibles tareas asignadas sin horas
+                    await db.from('task_workers').delete().eq('worker_id', id);
                     await dbDeleteWorker(id);
                     state.workers = state.workers.filter(w => w.id !== id);
                     renderAll();
+                    alert(`✅ Trabajador "${w.name}" eliminado correctamente.`);
                 } catch (err) { }
             }
         };
@@ -3961,30 +4106,15 @@
             if (totalQty === 0) return 0;
             
             const pTasks = state.tasks.filter(t => t.projectId === projectId && t.status === 'Terminada' && !t.isRework);
-            
-            const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === projectId);
-            let stages = [];
-            
-            if (projectStages.length > 0) {
-                stages = projectStages.map(pe => {
-                    const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
-                    return {
-                        name: em.nombre,
-                        weight: (pe.peso || 25) / 100
-                    };
-                });
-            } else {
-                stages = [
-                    { name: 'Preparación', weight: 0.35 },
-                    { name: 'Armado', weight: 0.25 },
-                    { name: 'Soldadura', weight: 0.25 },
-                    { name: 'Terminación', weight: 0.15 }
-                ];
-            }
+            const stages = getProjectActiveStages(projectId).map(st => ({
+                name: st.name,
+                weight: st.peso / 100
+            }));
+            const stageNames = stages.map(s => s.name);
             
             let weightedAdvance = 0;
             stages.forEach(st => {
-                const stageTasks = pTasks.filter(t => t.process === st.name);
+                const stageTasks = pTasks.filter(t => isTaskMatchingStage(t.process, st.name, stageNames));
                 let stageKg = 0;
                 
                 if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
@@ -4002,26 +4132,46 @@
 
         function calculateProjectProgressAtDate(projectId, date) {
             const pElements = state.elements.filter(e => e.projectId === projectId);
-            const totalQty = pElements.reduce((s, e) => s + e.quantity, 0);
-            if (totalQty === 0) return 0;
+            const totalKg = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
+            if (totalKg === 0) return 0;
 
-            const pParts = state.parts.filter(p => p.projectId === projectId);
-            const totalPartsQty = pParts.reduce((s, p) => s + p.totalQty, 0);
+            const stages = getProjectActiveStages(projectId).map(st => ({
+                name: st.name,
+                weight: st.peso / 100
+            }));
+            const stageNames = stages.map(s => s.name);
 
-            const tasksClosedUpToDate = state.tasks.filter(t => t.projectId === projectId && t.status === 'Terminada' && !t.isRework && t.createdAt && t.createdAt.split('T')[0] <= date);
+            // Filtrar tareas terminadas hasta la fecha date indicada
+            const allTerminadas = state.tasks.filter(t => t.projectId === projectId && t.status === 'Terminada' && !t.isRework);
+            const tasksClosedUpToDate = allTerminadas.filter(t => {
+                const taskEntries = state.timeEntries.filter(te => te.taskId === t.id);
+                if (taskEntries.length > 0) {
+                    const lastDate = taskEntries.map(te => te.work_date).sort().pop();
+                    return lastDate <= date;
+                }
+                return t.createdAt && t.createdAt.split('T')[0] <= date;
+            });
 
-            const prepClosed = tasksClosedUpToDate.filter(t => t.process === 'Preparación').reduce((s, t) => s + t.quantity, 0);
-            const armadoClosed = tasksClosedUpToDate.filter(t => t.process === 'Armado').reduce((s, t) => s + t.quantity, 0);
-            const soldClosed = tasksClosedUpToDate.filter(t => t.process === 'Soldadura').reduce((s, t) => s + t.quantity, 0);
-            const termClosed = tasksClosedUpToDate.filter(t => t.process === 'Terminación').reduce((s, t) => s + t.quantity, 0);
+            let weightedAdvance = 0;
+            stages.forEach(st => {
+                const stageTasks = tasksClosedUpToDate.filter(t => isTaskMatchingStage(t.process, st.name, stageNames));
+                let stageKg = 0;
+                if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
+                    stageKg = stageTasks.reduce((s, t) => {
+                        const part = state.parts.find(pa => pa.id === t.partId);
+                        return s + (part ? part.unit_weight_kg * t.quantity : 0);
+                    }, 0);
+                } else {
+                    stageKg = stageTasks.reduce((s, t) => {
+                        const el = pElements.find(e => e.id === t.elementId);
+                        return s + (el ? el.unit_weight_kg * t.quantity : 0);
+                    }, 0);
+                }
+                const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
+                weightedAdvance += stagePct * st.weight;
+            });
 
-            const prepPct = totalPartsQty > 0 ? (prepClosed / totalPartsQty) * 100 : 0;
-            const armadoPct = totalQty > 0 ? (armadoClosed / totalQty) * 100 : 0;
-            const soldPct = totalQty > 0 ? (soldClosed / totalQty) * 100 : 0;
-            const termPct = totalQty > 0 ? (termClosed / totalQty) * 100 : 0;
-
-            const overall = (prepPct * 0.35) + (armadoPct * 0.25) + (soldPct * 0.25) + (termPct * 0.15);
-            return Math.min(100, Math.round(overall));
+            return Math.min(100, Math.round(weightedAdvance));
         }
 
         // ════════════════════════════════════════════════════════
@@ -4115,23 +4265,24 @@
                 // If project dual progress exists, render it (fallback check)
                 const dualProgressContainer = document.getElementById("project-dual-progress-container");
                 if (dualProgressContainer) {
-                    const processes = ['Preparación', 'Armado', 'Soldadura', 'Terminación']; const weights = { 'Preparación': 35, 'Armado': 25, 'Soldadura': 25, 'Terminación': 15 };
+                    const activeStages = getProjectActiveStages(currentProjectId);
+                    const stageNames = activeStages.map(s => s.name);
                     let progressHtml = '';
-                    processes.forEach(proc => {
+                    activeStages.forEach(st => {
                         let denom = sumQty;
                         let closedQty = 0;
-                        if (proc === 'Preparación') {
+                        if (st.name === 'Preparación') {
                             const pParts = state.parts.filter(p => p.projectId === currentProjectId);
                             denom = pParts.reduce((s, p) => s + p.totalQty, 0);
-                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === 'Preparación' && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
+                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && isTaskMatchingStage(t.process, 'Preparación', stageNames) && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
                         } else {
-                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && t.process === proc && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
+                            closedQty = state.tasks.filter(t => t.projectId === currentProjectId && isTaskMatchingStage(t.process, st.name, stageNames) && t.status === 'Terminada' && !t.isRework).reduce((s, t) => s + t.quantity, 0);
                         }
                         if (!denom) return;
                         const execPct = Math.min(100, Math.round((closedQty / denom) * 100));
-                        const approvedQty = state.inspections.filter(i => i.projectId === currentProjectId && i.type === (proc === 'Terminación' || proc === 'Soldadura' ? 'Soldadura' : 'Dimensional') && i.result === 'Aprobado').reduce((s, i) => s + (i.quantity || 1), 0);
+                        const approvedQty = state.inspections.filter(i => i.projectId === currentProjectId && (st.name.includes('Soldadura') || st.name.includes('Terminación') ? i.type === 'Soldadura' : i.type === 'Dimensional') && i.result === 'Aprobado').reduce((s, i) => s + (i.quantity || 1), 0);
                         const qualPct = Math.min(100, Math.round((approvedQty / sumQty) * 100));
-                        progressHtml += `<div class="dual-progress"><div class="dual-progress-label"><span>${proc} (${weights[proc]}%)</span><span>Ejec: ${execPct}% | Cal: ${qualPct}%</span></div><div class="progress-track"><div class="progress-fill-exec" style="width:${execPct}%"></div><div class="progress-fill-qual" style="width:${qualPct}%"></div></div><div class="dual-progress-legend"><span><span class="legend-dot" style="background:var(--primary)"></span>Ejecución</span><span><span class="legend-dot" style="background:var(--info)"></span>Calidad</span></div></div>`;
+                        progressHtml += `<div class="dual-progress"><div class="dual-progress-label"><span>${st.name} (${st.peso}%)</span><span>Ejec: ${execPct}% | Cal: ${qualPct}%</span></div><div class="progress-track"><div class="progress-fill-exec" style="width:${execPct}%"></div><div class="progress-fill-qual" style="width:${qualPct}%"></div></div><div class="dual-progress-legend"><span><span class="legend-dot" style="background:var(--primary)"></span>Ejecución</span><span><span class="legend-dot" style="background:var(--info)"></span>Calidad</span></div></div>`;
                     });
                     dualProgressContainer.innerHTML = progressHtml || '<p style="color:var(--muted);">Cargue elementos para ver el avance.</p>';
                 }
@@ -4206,40 +4357,21 @@
                 const totalQty = state.elements.filter(e => e.projectId === p.id).reduce((s, e) => s + e.quantity, 0);
                 const totalKg = state.elements.filter(e => e.projectId === p.id).reduce((s, e) => s + e.total_weight_kg, 0);
                 
-                const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === p.id);
-                let stages = [];
-                
-                if (projectStages.length > 0) {
-                    stages = projectStages.map(pe => {
-                        const em = state.etapasMaestras.find(e => e.id === pe.etapaId);
-                        const stageWeight = (pe.peso || (100 / projectStages.length)) / 100.0;
-                        return {
-                            id: em.id,
-                            name: em.nombre,
-                            weight: stageWeight,
-                            colorClass: '',
-                            colorCss: em.colorCss,
-                            unit: (em.nombre === 'Preparación' || em.nombre === 'Corte' || em.nombre === 'Plegado') ? 'Piezas' : 'Conj.'
-                        };
-                    }).sort((a, b) => {
-                        const ea = state.etapasMaestras.find(e => e.id === a.id);
-                        const eb = state.etapasMaestras.find(e => e.id === b.id);
-                        return (ea?.orden || 0) - (eb?.orden || 0);
-                    });
-                } else {
-                    stages = [
-                        { id: 'prep', name: 'Preparación', weight: 0.35, colorClass: 'stage-prep', colorCss: 'var(--primary)', unit: 'Piezas' },
-                        { id: 'armado', name: 'Armado', weight: 0.25, colorClass: 'stage-armado', colorCss: 'var(--info)', unit: 'Conj.' },
-                        { id: 'sold', name: 'Soldadura', weight: 0.25, colorClass: 'stage-sold', colorCss: 'var(--accent)', unit: 'Conj.' },
-                        { id: 'term', name: 'Terminación', weight: 0.15, colorClass: 'stage-term', colorCss: '#8a3330', unit: 'Conj.' }
-                    ];
-                }
+                const stages = getProjectActiveStages(p.id).map(st => ({
+                    id: st.id,
+                    name: st.name,
+                    weight: st.peso / 100.0,
+                    colorClass: '',
+                    colorCss: st.colorCss,
+                    unit: (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado') ? 'Piezas' : 'Conj.'
+                }));
+                const stageNames = stages.map(s => s.name);
                 
                 let weightedAdvance = 0;
                 let stagesHtml = '';
                 
                 stages.forEach(st => {
-                    const stageTasks = pTasks.filter(t => t.process === st.name);
+                    const stageTasks = pTasks.filter(t => isTaskMatchingStage(t.process, st.name, stageNames));
                     const stageHh = state.timeEntries.filter(te => te.projectId === p.id && stageTasks.find(t => t.id === te.taskId)).reduce((s, te) => s + te.hh, 0);
                     
                     let stageKg = 0;
@@ -4279,7 +4411,17 @@
                 
                 const advancePct = Math.round(weightedAdvance);
                 
-                const termTasks = pTasks.filter(t => t.process === 'Terminación');
+                // Medición dinámica de kilos terminados:
+                // Se toma la última etapa activa que tenga tareas terminadas, o la última etapa configurada en la OT
+                const lastStage = stages.length > 0 ? stages[stages.length - 1] : null;
+                const activeStagesWithCompleted = [...stages].reverse().find(st => {
+                    return pTasks.some(t => isTaskMatchingStage(t.process, st.name, stageNames));
+                });
+                const refStage = (lastStage && pTasks.some(t => isTaskMatchingStage(t.process, lastStage.name, stageNames)))
+                    ? lastStage
+                    : (activeStagesWithCompleted || lastStage);
+
+                const termTasks = refStage ? pTasks.filter(t => isTaskMatchingStage(t.process, refStage.name, stageNames)) : [];
                 const termKg = termTasks.reduce((s, t) => { const el = state.elements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
                 const termTon = termKg / 1000;
                 const globalHhTon = termTon > 0 ? (pHh / termTon).toFixed(1) : (pHh > 0 ? '> 999' : '0.0');
@@ -4307,14 +4449,17 @@
                 let hhSupProj = 0, hhAdmProj = 0;
                 if (state.hhIndirectas && state.hhIndirectas.length > 0) {
                     // Obtener los meses con actividad en este proyecto
-                    const projMonths = new Set(projEntries.map(te => `${new Date(te.work_date).getFullYear()}-${new Date(te.work_date).getMonth()+1}`));
+                    const projMonths = new Set(projEntries.map(te => {
+                        const parts = (te.work_date || '').split('T')[0].split('-');
+                        return parts.length >= 2 ? `${parseInt(parts[0], 10)}-${parseInt(parts[1], 10)}` : null;
+                    }).filter(Boolean));
                     projMonths.forEach(ym => {
                         const [yr, mo] = ym.split('-').map(Number);
-                        const totalDirectMes = state.timeEntries.filter(te => { const d = new Date(te.work_date); return d.getFullYear() === yr && d.getMonth()+1 === mo; }).reduce((s,te) => s + te.hh, 0);
-                        const projDirectMes = state.timeEntries.filter(te => te.projectId === p.id && (() => { const d = new Date(te.work_date); return d.getFullYear() === yr && d.getMonth()+1 === mo; })()).reduce((s,te) => s + te.hh, 0);
+                        const totalDirectMes = state.timeEntries.filter(te => isWorkDateInMonth(te.work_date, yr, mo)).reduce((s, te) => s + (parseFloat(te.hh) || 0), 0);
+                        const projDirectMes = state.timeEntries.filter(te => getEntryProjectId(te) === p.id && isWorkDateInMonth(te.work_date, yr, mo)).reduce((s, te) => s + (parseFloat(te.hh) || 0), 0);
                         const pct = totalDirectMes > 0 ? projDirectMes / totalDirectMes : 0;
-                        const supMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s,h) => s + h.cantidadHh, 0);
-                        const admMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s,h) => s + h.cantidadHh, 0);
+                        const supMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s, h) => s + (parseFloat(h.cantidadHh) || 0), 0);
+                        const admMes = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s, h) => s + (parseFloat(h.cantidadHh) || 0), 0);
                         hhSupProj += supMes * pct;
                         hhAdmProj += admMes * pct;
                     });
@@ -4983,9 +5128,23 @@
             const now = new Date();
             const activePeriod = `${anioInput ? anioInput.value : now.getFullYear()}-${hhiMesSelect ? hhiMesSelect.value : now.getMonth() + 1}`;
 
-            const months = [...new Set(state.hhIndirectas.map(h => `${h.anio}-${h.mes}`))];
-            if (!months.includes(activePeriod)) months.push(activePeriod);
-            months.sort().reverse();
+            // Coleccionar meses desde registros indirectos y también desde timeEntries
+            const monthsSet = new Set(state.hhIndirectas.map(h => `${h.anio}-${h.mes}`));
+            (state.timeEntries || []).forEach(te => {
+                if (te.work_date) {
+                    const p = te.work_date.split('T')[0].split('-');
+                    if (p.length >= 2) monthsSet.add(`${parseInt(p[0], 10)}-${parseInt(p[1], 10)}`);
+                }
+            });
+            if (!monthsSet.has(activePeriod)) monthsSet.add(activePeriod);
+
+            const months = Array.from(monthsSet);
+            // Ordenar numéricamente de forma descendente (año desc, mes desc)
+            months.sort((a, b) => {
+                const [yA, mA] = a.split('-').map(Number);
+                const [yB, mB] = b.split('-').map(Number);
+                return yB !== yA ? yB - yA : mB - mA;
+            });
 
             const currentVal = mesSelect.value || activePeriod;
             mesSelect.innerHTML = months.map(m => {
@@ -4999,63 +5158,112 @@
 
             const selectedMonth = mesSelect.value;
             if (!selectedMonth) {
-                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center;">Seleccione un mes</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center; padding: 16px;">Seleccione un mes</td></tr>';
                 return;
             }
 
             const [yr, mo] = selectedMonth.split('-').map(Number);
+            const monthStart = `${yr}-${String(mo).padStart(2, '0')}-01`;
+            const lastDayNum = new Date(yr, mo, 0).getDate();
+            const monthEnd = `${yr}-${String(mo).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
             
-            // Get total direct HH for this month across all projects
-            const entriesThisMonth = state.timeEntries.filter(te => {
-                const d = new Date(te.work_date);
-                return d.getFullYear() === yr && d.getMonth() + 1 === mo;
-            });
-            const totalDirectHH = entriesThisMonth.reduce((s, te) => s + te.hh, 0);
+            // Get total direct HH for this month across all projects (sin sesgo de timezone)
+            const entriesThisMonth = (state.timeEntries || []).filter(te => isWorkDateInMonth(te.work_date, yr, mo));
+            const totalDirectHH = entriesThisMonth.reduce((s, te) => s + (parseFloat(te.hh) || 0), 0);
 
             // Get indirect HH for this month
-            const supHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s, h) => s + h.cantidadHh, 0);
-            const admHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s, h) => s + h.cantidadHh, 0);
+            const supHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Supervisión').reduce((s, h) => s + (parseFloat(h.cantidadHh) || 0), 0);
+            const admHH = state.hhIndirectas.filter(h => h.anio === yr && h.mes === mo && h.tipo === 'Administrativa').reduce((s, h) => s + (parseFloat(h.cantidadHh) || 0), 0);
 
-            // Get projects with HH in this month
-            const projectIds = [...new Set(entriesThisMonth.map(te => te.projectId))];
-            
-            if (projectIds.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center;">No hay HH directas registradas en este mes</td></tr>';
+            // Checkbox para ver todas las OT o solo las del período
+            const showAllCb = document.getElementById('hhi-show-all-ot');
+            const showAll = showAllCb ? showAllCb.checked : false;
+
+            // Identificar proyectos del período
+            // Un proyecto pertenece al período si:
+            // 1. Registra HH directas en el mes seleccionado.
+            // 2. O su rango de vigencia (inicio - plazo) intersecta con el mes.
+            // 3. O tiene tareas activas en el sistema.
+            // 4. O el usuario activó la opción "Mostrar todas las OT".
+            const periodProjects = (state.projects || []).filter(proj => {
+                if (showAll) return true;
+                
+                const hasHH = entriesThisMonth.some(te => getEntryProjectId(te) === proj.id);
+                if (hasHH) return true;
+
+                const pStart = proj.startDate || (proj.createdAt ? proj.createdAt.split('T')[0] : null);
+                const pEnd = proj.deadline || null;
+                const overlapsMonth = (!pStart || pStart <= monthEnd) && (!pEnd || pEnd >= monthStart);
+                if (overlapsMonth) return true;
+
+                const hasActiveTasks = (state.tasks || []).some(t => t.projectId === proj.id && t.status === 'Activa');
+                if (hasActiveTasks) return true;
+
+                return false;
+            });
+
+            if (periodProjects.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align: center; padding: 18px;">No hay proyectos activos ni con horas registradas en este período</td></tr>';
                 return;
             }
+
+            // Calcular datos por proyecto
+            const projectData = periodProjects.map(proj => {
+                const projDirect = entriesThisMonth
+                    .filter(te => getEntryProjectId(te) === proj.id)
+                    .reduce((s, te) => s + (parseFloat(te.hh) || 0), 0);
+                const pct = totalDirectHH > 0 ? (projDirect / totalDirectHH) : 0;
+                const projSup = supHH * pct;
+                const projAdm = admHH * pct;
+                const projTotal = projDirect + projSup + projAdm;
+
+                return {
+                    proj,
+                    projDirect,
+                    pct,
+                    projSup,
+                    projAdm,
+                    projTotal
+                };
+            });
+
+            // Ordenar: primero los que tienen HH directas consumidas (descendente), luego por código de OT
+            projectData.sort((a, b) => {
+                if (a.projDirect > 0 || b.projDirect > 0) {
+                    if (a.projDirect !== b.projDirect) return b.projDirect - a.projDirect;
+                }
+                return (a.proj.otCode || '').localeCompare(b.proj.otCode || '', undefined, { numeric: true });
+            });
 
             let rows = '';
             let totals = { direct: 0, sup: 0, adm: 0, total: 0 };
 
-            projectIds.forEach(pid => {
-                const proj = state.projects.find(p => p.id === pid);
-                if (!proj) return;
-                const projDirect = entriesThisMonth.filter(te => te.projectId === pid).reduce((s, te) => s + te.hh, 0);
-                const pct = totalDirectHH > 0 ? projDirect / totalDirectHH : 0;
-                const projSup = supHH * pct;
-                const projAdm = admHH * pct;
-                const projTotal = projDirect + projSup + projAdm;
-                
+            projectData.forEach(({ proj, projDirect, pct, projSup, projAdm, projTotal }) => {
                 totals.direct += projDirect;
                 totals.sup += projSup;
                 totals.adm += projAdm;
                 totals.total += projTotal;
 
-                rows += `<tr>
-                    <td style="font-weight:600;">OT ${proj.otCode} - ${proj.projectName}</td>
-                    <td>${projDirect.toFixed(1)}</td>
-                    <td>${(pct * 100).toFixed(1)}%</td>
-                    <td style="color:#0369a1; font-weight:600;">${projSup.toFixed(1)}</td>
-                    <td style="color:#be185d; font-weight:600;">${projAdm.toFixed(1)}</td>
-                    <td style="font-weight:800; color:var(--primary);">${projTotal.toFixed(1)}</td>
+                const hasNoHH = projDirect === 0;
+                const otBadge = hasNoHH 
+                    ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:10px; font-weight:600; color:var(--muted); background:#eceff1; border-radius:10px;">0 HH en mes</span>` 
+                    : '';
+
+                rows += `<tr style="${hasNoHH ? 'opacity: 0.75;' : ''}">
+                    <td style="font-weight:600;">OT ${proj.otCode} - ${proj.projectName} ${otBadge}</td>
+                    <td style="${hasNoHH ? 'color:var(--muted);' : ''}">${projDirect.toFixed(1)}</td>
+                    <td style="${hasNoHH ? 'color:var(--muted);' : ''}">${(pct * 100).toFixed(1)}%</td>
+                    <td style="color:${hasNoHH ? 'var(--muted)' : '#0369a1'}; font-weight:${hasNoHH ? 'normal' : '600'};">${projSup.toFixed(1)}</td>
+                    <td style="color:${hasNoHH ? 'var(--muted)' : '#be185d'}; font-weight:${hasNoHH ? 'normal' : '600'};">${projAdm.toFixed(1)}</td>
+                    <td style="font-weight:800; color:${hasNoHH ? 'var(--muted)' : 'var(--primary)'};">${projTotal.toFixed(1)}</td>
                 </tr>`;
             });
 
-            // Add totals row
+            // Fila de totales
             rows += `<tr style="background:#f0f0f0; font-weight:800; border-top:2px solid var(--line);">
-                <td>TOTALES</td>
+                <td>TOTALES (${projectData.length} OT)</td>
                 <td>${totals.direct.toFixed(1)}</td>
-                <td>100%</td>
+                <td>${totalDirectHH > 0 ? '100%' : '0%'}</td>
                 <td style="color:#0369a1;">${totals.sup.toFixed(1)}</td>
                 <td style="color:#be185d;">${totals.adm.toFixed(1)}</td>
                 <td style="color:var(--primary);">${totals.total.toFixed(1)}</td>
@@ -5080,9 +5288,10 @@
                 </select>
                 <select onchange="updateTaskFilter('process', this.value)" style="font-size:12px;padding:4px 8px;">
                     <option value="">Todos los procesos</option>
-                    <option value="Armado">Armado</option>
-                    <option value="Soldadura">Soldadura</option>
-                    <option value="Terminación">Terminación</option>
+                    ${Array.from(new Set([
+                        ...(state.etapasMaestras || []).map(em => em.nombre),
+                        ...(state.tasks || []).map(t => t.process)
+                    ])).filter(Boolean).filter(pr => pr !== 'Preparación').map(proc => `<option value="${proc}" ${taskFilters.process === proc ? 'selected' : ''}>${proc}</option>`).join('')}
                 </select>
                 <select onchange="updateTaskFilter('workerId', this.value)" style="font-size:12px;padding:4px 8px;">
                     <option value="">Todos los trabajadores</option>
@@ -5350,7 +5559,7 @@
                             projectId: task.projectId,
                             work_date: workDate,
                             hh: we.hh,
-                            is_rework: task.code.includes('-R'),
+                            is_rework: Boolean(task.isRework || task.process === 'Retrabajo' || /-R-\d{2}/.test(task.code)),
                             validated: true
                         };
                         const saved = await dbInsertTimeEntry(entry);
@@ -5551,12 +5760,13 @@
             document.getElementById("workers-table").innerHTML = state.workers.map(w => {
                 const isRead = isReadOnly();
                 const catBadge = getWorkerCategoryBadge(w.role);
+                const hasHours = (state.timeEntries || []).some(te => te.workerId === w.id || te.worker_id === w.id);
 
                 const actionBtns = !isRead ? `
                 <div style="display:flex;gap:4px;">
                     <button onclick="openEditWorkerModal('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;" title="Editar">✏️ Editar</button>
                     <button onclick="toggleWorker('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:var(--line);color:var(--primary);background:transparent;" title="Desactivar/Reactivar">${w.active ? '❌ Desactivar' : '✅ Reactivar'}</button>
-                    <button onclick="deleteWorker('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;" title="Eliminar">🗑️</button>
+                    <button onclick="deleteWorker('${w.id}')" style="padding:3px 8px;font-size:11px;border-color:${hasHours ? '#fca5a5' : 'var(--danger)'};color:${hasHours ? '#ef4444' : 'var(--danger)'};background:transparent;" title="${hasHours ? 'Tiene horas registradas (Usa Desactivar)' : 'Eliminar'}">🗑️</button>
                 </div>
             ` : '<span style="color:var(--muted);font-size:12px;">—</span>';
                 return `<tr><td>${w.rrhhCode || '-'}</td><td><strong>${w.name}</strong></td><td>${w.role}</td><td>${catBadge}</td><td><span class="status ${w.active ? 'ok' : 'bad'}">${w.active ? 'Activo' : 'Inactivo'}</span></td><td>${actionBtns}</td></tr>`;
