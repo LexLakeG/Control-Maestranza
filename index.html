@@ -552,12 +552,38 @@
             display: flex;
             flex-direction: column;
             gap: 0;
-            max-height: 120px;
+            max-height: 220px;
             overflow-y: auto;
             border: 1px solid var(--line);
             padding: 6px 8px;
             border-radius: 6px;
             background: #fff;
+        }
+
+        .task-mark-filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .task-mark-filter-bar input[type="search"] {
+            flex: 1;
+            min-width: 150px;
+            padding: 7px 10px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .task-mark-filter-bar label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
         }
 
         .compact-list .checkbox-item {
@@ -1464,8 +1490,13 @@
                                     <option value="Soldadura">Soldadura (Conjuntos)</option>
                                     <option value="Terminación">Terminación (Conjuntos)</option>
                                 </select></label>
-                            <label class="wide">Conjuntos (Marcas) <div class="compact-list" id="element-checkboxes">
-                                </div></label>
+                            <label class="wide">Conjuntos (Marcas)
+                                <div class="task-mark-filter-bar">
+                                    <input type="search" id="task-element-search" placeholder="Buscar marca..." aria-label="Buscar marca">
+                                    <label><input type="checkbox" id="task-pending-only" checked> Solo faltantes</label>
+                                </div>
+                                <div class="compact-list" id="element-checkboxes"></div>
+                            </label>
                             <label class="wide" id="part-label" style="display:none;">Partes específicas <div
                                     class="compact-list" id="part-checkboxes"></div></label>
                             <label class="wide">Cantidad a procesar <input type="number" name="quantity"
@@ -2195,7 +2226,10 @@
                 db.from('hh_indirectas').select('*').order('anio,mes'),
             ]);
             const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10].filter(Boolean);
-            if (errors.length) { console.error('Supabase load errors:', errors); }
+            if (errors.length) {
+                console.error('Supabase load errors:', errors);
+                throw new Error('No se pudo cargar toda la información operativa. Revisa la conexión e inténtalo nuevamente.');
+            }
             return {
                 projects: (projects || []).map(norm.project),
                 workers: (workers || []).map(norm.worker),
@@ -2231,7 +2265,10 @@
             if (error) { throw error; }
 
             if (selectedStages) {
-                await db.from('proyecto_etapas').delete().eq('project_id', id);
+                const { error: deleteStagesError } = await db.from('proyecto_etapas').delete().eq('project_id', id);
+                if (deleteStagesError) {
+                    throw new Error('No se pudieron actualizar las etapas del proyecto: ' + deleteStagesError.message);
+                }
                 state.proyectoEtapas = state.proyectoEtapas.filter(pe => pe.projectId !== id);
 
                 if (selectedStages.length > 0) {
@@ -2361,12 +2398,24 @@
 
 
         // --- Tareas ---
+        function normalizeTaskQuantity(value, context = 'la tarea') {
+            const numericValue = Number(value);
+            if (!Number.isFinite(numericValue) || !Number.isInteger(numericValue) || numericValue <= 0) {
+                throw new Error(`Cantidad inválida para ${context}. Debe ser un número entero mayor a 0.`);
+            }
+            return numericValue;
+        }
+
         async function dbInsertTask(task) {
-            const { data: taskData, error: taskError } = await db.from('tasks').insert({ id: task.id, project_id: task.projectId, code: task.code, process: task.process, element_id: task.elementId || null, part_id: task.partId || null, quantity: task.quantity, status: task.status, instructions: task.instructions || '', csv_version: task.csvVersion || 0, csv_warning: false, is_rework: task.isRework || false, linked_inspection_id: task.linkedInspectionId || null }).select().single();
+            const safeQuantity = normalizeTaskQuantity(task.quantity, `la tarea "${task.code || 'sin código'}"`);
+            const { data: taskData, error: taskError } = await db.from('tasks').insert({ id: task.id, project_id: task.projectId, code: task.code, process: task.process, element_id: task.elementId || null, part_id: task.partId || null, quantity: safeQuantity, status: task.status, instructions: task.instructions || '', csv_version: task.csvVersion || 0, csv_warning: false, is_rework: task.isRework || false, linked_inspection_id: task.linkedInspectionId || null }).select().single();
             if (taskError) { alert('Error al crear tarea: ' + taskError.message); throw taskError; }
             if (task.workerIds && task.workerIds.length > 0) {
                 const { error: twError } = await db.from('task_workers').insert(task.workerIds.map(wId => ({ task_id: task.id, worker_id: wId })));
-                if (twError) console.error('Error inserting task_workers:', twError);
+                if (twError) {
+                    await db.from('tasks').delete().eq('id', task.id);
+                    throw new Error('La tarea no pudo asignarse a sus trabajadores: ' + twError.message);
+                }
             }
             return { ...norm.task(taskData), workerIds: task.workerIds || [] };
         }
@@ -2376,21 +2425,24 @@
             if (!tasks.length) return [];
 
             // 1. Insertar todas las tareas en una sola llamada
-            const taskRows = tasks.map(t => ({
-                id: t.id,
-                project_id: t.projectId,
-                code: t.code,
-                process: t.process,
-                element_id: t.elementId || null,
-                part_id: t.partId || null,
-                quantity: t.quantity,
-                status: t.status,
-                instructions: t.instructions || '',
-                csv_version: t.csvVersion || 0,
-                csv_warning: false,
-                is_rework: t.isRework || false,
-                linked_inspection_id: t.linkedInspectionId || null
-            }));
+            const taskRows = tasks.map(t => {
+                const safeQuantity = normalizeTaskQuantity(t.quantity, `la tarea "${t.code || 'sin código'}"`);
+                return {
+                    id: t.id,
+                    project_id: t.projectId,
+                    code: t.code,
+                    process: t.process,
+                    element_id: t.elementId || null,
+                    part_id: t.partId || null,
+                    quantity: safeQuantity,
+                    status: t.status,
+                    instructions: t.instructions || '',
+                    csv_version: t.csvVersion || 0,
+                    csv_warning: false,
+                    is_rework: t.isRework || false,
+                    linked_inspection_id: t.linkedInspectionId || null
+                };
+            });
 
             const { data: savedTasks, error: tasksError } = await db.from('tasks').insert(taskRows).select('*, task_workers(worker_id)');
             if (tasksError) { console.error('Error en bulk insert tasks:', tasksError); throw tasksError; }
@@ -2407,7 +2459,11 @@
 
             if (allTaskWorkers.length > 0) {
                 const { error: twError } = await db.from('task_workers').insert(allTaskWorkers);
-                if (twError) console.error('Error en bulk insert task_workers:', twError);
+                if (twError) {
+                    const taskIds = tasks.map(task => task.id);
+                    await db.from('tasks').delete().in('id', taskIds);
+                    throw new Error('Las tareas no pudieron asignarse a sus trabajadores: ' + twError.message);
+                }
             }
 
             // 3. Retornar tareas normalizadas con workerIds correctos
@@ -2630,6 +2686,11 @@
                 }
             } catch (err) {
                 console.error('Error cargando estado:', err);
+                hideLoadingOverlay();
+                showLoginScreen();
+                document.getElementById('login-error').textContent = '⚠️ No se pudo cargar toda la información. No se muestran datos parciales.';
+                await db.auth.signOut();
+                return;
             }
             hideLoadingOverlay();
             hideLoginScreen();
@@ -3288,6 +3349,45 @@
             return str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         }
 
+        function getTaskWeightContribution(task, projectElements = []) {
+            if (!task) return 0;
+            const qty = Number(task.quantity) || 0;
+            if (qty <= 0) return 0;
+
+            const part = task.partId ? (state.parts.find(p => p.id === task.partId) || null) : null;
+            if (part) {
+                const partUnitWeight = Number(part.unit_weight_kg) || 0;
+                const partTotalWeight = Number(part.total_weight_kg) || 0;
+                const partQty = Number(part.totalQty) || qty;
+                if (partTotalWeight > 0) return (partTotalWeight / Math.max(partQty, 1)) * qty;
+                if (partUnitWeight > 0) return partUnitWeight * qty;
+            }
+
+            const element = task.elementId ? (projectElements.find(e => e.id === task.elementId) || state.elements.find(e => e.id === task.elementId) || null) : null;
+            if (element) {
+                const elementUnitWeight = Number(element.unit_weight_kg) || 0;
+                const elementTotalWeight = Number(element.total_weight_kg) || 0;
+                const elementQty = Number(element.quantity) || qty;
+                if (elementTotalWeight > 0) return (elementTotalWeight / Math.max(elementQty, 1)) * qty;
+                if (elementUnitWeight > 0) return elementUnitWeight * qty;
+            }
+
+            return 0;
+        }
+
+        function getStageWeightBasis(projectId, stageName) {
+            const stageKey = normalizeStageText(stageName || '');
+            const usesParts = stageKey.includes('prepar') || stageKey.includes('corte') || stageKey.includes('plegado') || stageKey.includes('cilind') || stageKey.includes('corte cnc');
+
+            if (usesParts) {
+                const parts = (state.parts || []).filter(p => p.projectId === projectId);
+                return parts.reduce((sum, p) => sum + (Number(p.total_weight_kg) || 0), 0);
+            }
+
+            const elements = (state.elements || []).filter(e => e.projectId === projectId);
+            return elements.reduce((sum, e) => sum + (Number(e.total_weight_kg) || 0), 0);
+        }
+
         function isTaskMatchingStage(taskProcess, stageName, projectStageNames = []) {
             if (!taskProcess || !stageName) return false;
             const normTask = normalizeStageText(taskProcess);
@@ -3348,9 +3448,17 @@
         const partCheckboxes = document.getElementById('part-checkboxes');
         const qtyInput = document.getElementById('task-qty-input');
         const qtyHint = document.getElementById('qty-hint');
+        const taskProjectSelect = document.getElementById('task-project-select');
+        const taskElementSearch = document.getElementById('task-element-search');
+        const taskPendingOnly = document.getElementById('task-pending-only');
+
+        function getTaskElementFilterText() {
+            return (taskElementSearch ? taskElementSearch.value.trim().toLowerCase() : '').replace(/\s+/g, ' ');
+        }
 
         function updateTaskFormContext() {
-            const projectId = document.getElementById('task-project-select').value;
+            const projectId = taskProjectSelect.value;
+            if (projectId) window.lastTaskProjectId = projectId;
             if (!projectId) { elementCheckboxes.innerHTML = '<p style="color: var(--muted); font-size: 13px; padding: 10px;">-- Seleccione proyecto primero --</p>'; partLabel.style.display = 'none'; return; }
             
             const projectStages = state.proyectoEtapas.filter(pe => pe.projectId === projectId);
@@ -3379,11 +3487,31 @@
             }
 
             const process = processSelect.value;
+            const filterText = getTaskElementFilterText();
+            const showPendingOnly = !!(taskPendingOnly && taskPendingOnly.checked);
             const pElements = state.elements.filter(e => e.projectId === projectId);
             const processOrder = Array.from(processSelect.options).map(o => o.value);
             const currentProcessIndex = processOrder.indexOf(process);
             
-            elementCheckboxes.innerHTML = pElements.map(e => {
+            const filteredElements = pElements.filter(e => {
+                const matchesText = !filterText || e.mark.toLowerCase().includes(filterText);
+                let available = 0, isBlocked = false;
+                if (currentProcessIndex === 0) {
+                    const assigned = state.tasks.filter(t => t.elementId === e.id && t.process === process && (t.status === 'Activa' || t.status === 'Terminada')).reduce((sum, t) => sum + t.quantity, 0); 
+                    available = e.quantity - assigned; 
+                } else {
+                    const prevProc = processOrder[currentProcessIndex - 1];
+                    const cp = state.tasks.filter(t => t.elementId === e.id && t.process === prevProc && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); 
+                    const ac = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Activa').reduce((s, t) => s + t.quantity, 0); 
+                    const cc = state.tasks.filter(t => t.elementId === e.id && t.process === process && t.status === 'Terminada').reduce((s, t) => s + t.quantity, 0); 
+                    available = cp - ac - cc; 
+                    if (cp === 0) { isBlocked = true; }
+                }
+                const pendingMatch = !showPendingOnly || (available > 0 && !isBlocked);
+                return matchesText && pendingMatch;
+            });
+            
+            elementCheckboxes.innerHTML = filteredElements.map(e => {
                 let available = 0, isBlocked = false, blockReason = '';
                 if (currentProcessIndex === 0) {
                     const assigned = state.tasks.filter(t => t.elementId === e.id && t.process === process && (t.status === 'Activa' || t.status === 'Terminada')).reduce((sum, t) => sum + t.quantity, 0); 
@@ -3398,13 +3526,18 @@
                 }
                 const disabledAttr = (available <= 0 || isBlocked) ? 'disabled' : ''; const textStyle = (available <= 0 || isBlocked) ? 'color:var(--muted);text-decoration:line-through;' : ''; const displayText = isBlocked ? `${e.mark} (${blockReason})` : `${e.mark} (Disp: ${available}/${e.quantity})`;
                 return `<label class="checkbox-item" style="${textStyle}"><input type="checkbox" name="elements" value="${e.id}" ${disabledAttr} class="task-element-cb">${displayText}</label>`;
-            }).join('') || '<p style="color:var(--muted);font-size:13px;padding:10px;">No hay conjuntos cargados.</p>';
+            }).join('') || '<p style="color:var(--muted);font-size:13px;padding:10px;">No hay conjuntos que coincidan con la búsqueda.</p>';
             
             document.querySelectorAll('.task-element-cb').forEach(cb => cb.addEventListener('change', updatePartsAndQtyContext));
             updatePartsAndQtyContext();
         }
-        document.getElementById('task-project-select').addEventListener('change', updateTaskFormContext);
+        taskProjectSelect.addEventListener('change', () => {
+            window.lastTaskProjectId = taskProjectSelect.value;
+            updateTaskFormContext();
+        });
         processSelect.addEventListener('change', updateTaskFormContext);
+        if (taskElementSearch) taskElementSearch.addEventListener('input', updateTaskFormContext);
+        if (taskPendingOnly) taskPendingOnly.addEventListener('change', updateTaskFormContext);
 
         function updatePartsAndQtyContext() {
             const process = processSelect.value;
@@ -3442,7 +3575,22 @@
             if (!selectedWorkers.length) { alert("Selecciona al menos un trabajador."); return; }
             const project = state.projects.find(p => p.id === projectId); if (!project) return;
             const instructions = form.get("instructions"); const createdAt = new Date().toISOString(); const csvVersion = project.csvVersion || 0;
-            const createTaskObj = (elId, partId, qty, code) => ({ id: crypto.randomUUID(), projectId, code, process, workerIds: selectedWorkers, elementId: elId, partId, quantity: qty, status: "Activa", instructions, csvVersion, csvWarning: false, isRework: false, createdAt });
+            const createTaskObj = (elId, partId, qty, code) => ({
+                id: crypto.randomUUID(),
+                projectId,
+                code,
+                process,
+                workerIds: selectedWorkers,
+                elementId: elId,
+                partId,
+                quantity: normalizeTaskQuantity(qty, `la tarea "${code}"`),
+                status: "Activa",
+                instructions,
+                csvVersion,
+                csvWarning: false,
+                isRework: false,
+                createdAt
+            });
             const processOrder = Array.from(processSelect.options).map(o => o.value);
             const currentProcessIndex = processOrder.indexOf(process);
 
@@ -3458,8 +3606,9 @@
                 for (const cb of checkedPartCbs) {
                     const partId = cb.value; const part = state.parts.find(p => p.id === partId); const el = state.elements.find(e => e.id === part.elementId);
                     const available = part.totalQty - state.tasks.filter(t => t.partId === partId && t.process === 'Preparación' && (t.status === 'Activa' || t.status === 'Terminada')).reduce((s, t) => s + t.quantity, 0);
+                    if (!Number.isFinite(available) || available <= 0) { alert(`Cantidad no disponible para la parte seleccionada.`); continue; }
                     const qty = (qtyToAssign !== null) ? qtyToAssign : available;
-                    if (qty <= 0 || qty > available) continue;
+                    if (!Number.isFinite(qty) || qty <= 0 || qty > available) { alert(`Cantidad no disponible para la parte seleccionada.`); continue; }
 
                     const existingCount = state.tasks.filter(t => t.projectId === projectId && t.process === process && state.elements.find(e => e.id === t.elementId)?.mark === el.mark).length;
                     const newlyAddedCount = newTasksCountByElement[el.mark] || 0;
@@ -3496,7 +3645,7 @@
                         }
                     }
                     const qty = (qtyToAssign !== null) ? qtyToAssign : available;
-                    if (qty <= 0 || qty > available) { alert(`Cantidad no disponible para ${el.mark}. Disponible: ${available}`); continue; }
+                    if (!Number.isFinite(available) || !Number.isFinite(qty) || qty <= 0 || qty > available) { alert(`Cantidad no disponible para ${el.mark}. Disponible: ${available}`); continue; }
 
 
 
@@ -4115,15 +4264,9 @@
             let weightedAdvance = 0;
             stages.forEach(st => {
                 const stageTasks = pTasks.filter(t => isTaskMatchingStage(t.process, st.name, stageNames));
-                let stageKg = 0;
-                
-                if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
-                    stageKg = stageTasks.reduce((s, t) => { const part = state.parts.find(pa => pa.id === t.partId); return s + (part ? part.unit_weight_kg * t.quantity : 0); }, 0);
-                } else {
-                    stageKg = stageTasks.reduce((s, t) => { const el = pElements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
-                }
-                
-                const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
+                const stageKg = stageTasks.reduce((s, t) => s + getTaskWeightContribution(t, pElements), 0);
+                const stageBasis = getStageWeightBasis(projectId, st.name) || totalKg || 1;
+                const stagePct = stageBasis > 0 ? Math.min(100, (stageKg / stageBasis) * 100) : 0;
                 weightedAdvance += stagePct * st.weight;
             });
             
@@ -4155,19 +4298,9 @@
             let weightedAdvance = 0;
             stages.forEach(st => {
                 const stageTasks = tasksClosedUpToDate.filter(t => isTaskMatchingStage(t.process, st.name, stageNames));
-                let stageKg = 0;
-                if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
-                    stageKg = stageTasks.reduce((s, t) => {
-                        const part = state.parts.find(pa => pa.id === t.partId);
-                        return s + (part ? part.unit_weight_kg * t.quantity : 0);
-                    }, 0);
-                } else {
-                    stageKg = stageTasks.reduce((s, t) => {
-                        const el = pElements.find(e => e.id === t.elementId);
-                        return s + (el ? el.unit_weight_kg * t.quantity : 0);
-                    }, 0);
-                }
-                const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
+                const stageKg = stageTasks.reduce((s, t) => s + getTaskWeightContribution(t, pElements), 0);
+                const stageBasis = getStageWeightBasis(projectId, st.name) || totalKg || 1;
+                const stagePct = stageBasis > 0 ? Math.min(100, (stageKg / stageBasis) * 100) : 0;
                 weightedAdvance += stagePct * st.weight;
             });
 
@@ -4377,15 +4510,10 @@
                     let stageKg = 0;
                     let stageQty = 0;
                     
-                    if (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado' || st.name === 'Corte CNC' || st.name === 'Cilindrado') {
-                        stageKg = stageTasks.reduce((s, t) => { const part = state.parts.find(pa => pa.id === t.partId); return s + (part ? part.unit_weight_kg * t.quantity : 0); }, 0);
-                        stageQty = stageTasks.reduce((s, t) => s + t.quantity, 0);
-                    } else {
-                        stageKg = stageTasks.reduce((s, t) => { const el = state.elements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
-                        stageQty = stageTasks.reduce((s, t) => s + t.quantity, 0);
-                    }
-                    
-                    const stagePct = totalKg > 0 ? Math.min(100, (stageKg / totalKg) * 100) : 0;
+                    stageKg = stageTasks.reduce((s, t) => s + getTaskWeightContribution(t, state.elements.filter(e => e.projectId === p.id)), 0);
+                    stageQty = stageTasks.reduce((s, t) => s + t.quantity, 0);
+                    const stageBasis = getStageWeightBasis(p.id, st.name) || totalKg || 1;
+                    const stagePct = stageBasis > 0 ? Math.min(100, (stageKg / stageBasis) * 100) : 0;
                     weightedAdvance += stagePct * st.weight;
                     
                     const stageTon = stageKg / 1000;
@@ -4422,7 +4550,7 @@
                     : (activeStagesWithCompleted || lastStage);
 
                 const termTasks = refStage ? pTasks.filter(t => isTaskMatchingStage(t.process, refStage.name, stageNames)) : [];
-                const termKg = termTasks.reduce((s, t) => { const el = state.elements.find(e => e.id === t.elementId); return s + (el ? el.unit_weight_kg * t.quantity : 0); }, 0);
+                const termKg = termTasks.reduce((s, t) => s + getTaskWeightContribution(t, state.elements.filter(e => e.projectId === p.id)), 0);
                 const termTon = termKg / 1000;
                 const globalHhTon = termTon > 0 ? (pHh / termTon).toFixed(1) : (pHh > 0 ? '> 999' : '0.0');
                 
@@ -5273,8 +5401,12 @@
         }
 
         function renderTasks() {
-            document.getElementById("task-project-select").innerHTML = state.projects.map(p => `<option value="${p.id}">OT ${p.otCode} - ${p.projectName}</option>`).join('');
-            if (currentProjectId) document.getElementById("task-project-select").value = currentProjectId;
+            const taskProjectSelectEl = document.getElementById("task-project-select");
+            taskProjectSelectEl.innerHTML = state.projects.map(p => `<option value="${p.id}">OT ${p.otCode} - ${p.projectName}</option>`).join('');
+            const preferredProjectId = window.lastTaskProjectId || currentProjectId;
+            const validProjectId = state.projects.some(p => p.id === preferredProjectId) ? preferredProjectId : (state.projects[0] ? state.projects[0].id : '');
+            if (validProjectId) taskProjectSelectEl.value = validProjectId;
+            window.lastTaskProjectId = validProjectId;
             document.getElementById("worker-checkboxes").innerHTML = state.workers.filter(w => w.active).map(w => `<label class="checkbox-item"><input type="checkbox" name="workers" value="${w.id}"> ${w.name} (${w.role})</label>`).join('');
             updateTaskFormContext();
 
