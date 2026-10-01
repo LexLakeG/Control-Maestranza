@@ -4036,6 +4036,7 @@
             taskToCloseId = taskId;
             const task = state.tasks.find(t => t.id === taskId);
             if (!task) return;
+            const defaultCloseDate = new Date().toISOString().split('T')[0];
             // MEJORA 3: Calcular HH automáticamente desde creación hasta ahora
             const hhAuto = calcHH(task.createdAt, new Date().toISOString());
             const createdLabel = task.createdAt ? new Date(task.createdAt).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
@@ -4044,6 +4045,10 @@
                 <div style="background:#e7f4ef;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;border-left:3px solid var(--primary);">
                     ⏱️ <strong>HH calculadas automáticamente:</strong> ${hhAuto} HH (desde ${createdLabel})<br>
                     <small style="color:var(--muted);">Horario hábil Lun-Mar 08:00–17:30 / Mié-Vie 08:00–16:30. Puedes ajustar el valor.</small>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:12px;padding:8px 10px;background:#f6f7f9;border:1px solid var(--line);border-radius:6px;">
+                    <label style="font-size:12px;font-weight:700;color:var(--muted);margin:0;">Fecha de término</label>
+                    <input type="date" id="close-task-date" value="${defaultCloseDate}" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:4px;">
                 </div>
                 ${(task.workerIds || []).map(wId => {
                     const worker = state.workers.find(w => w.id === wId);
@@ -4132,12 +4137,12 @@
             const missingWorkers = [];
             inputs.forEach(input => { const hh = parseFloat(input.value); const worker = state.workers.find(w => w.id === input.dataset.workerId); if (!hh || hh <= 0) missingWorkers.push(worker ? worker.name : 'Trabajador desconocido'); });
             if (missingWorkers.length > 0) { alert(`⚠️ No se puede cerrar la tarea.\n\nDebe ingresar las HH de todos los trabajadores asignados.\n\nFalta ingresar HH para:\n• ${missingWorkers.join('\n• ')}`); return; }
-            const today = new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('close-task-date')?.value || new Date().toISOString().split('T')[0];
             try {
                 for (const input of inputs) {
                     const hh = parseFloat(input.value);
                     const isReworkTask = Boolean(task.isRework || task.process === 'Retrabajo' || /-R-\d{2}/.test(task.code));
-                    const entry = { id: crypto.randomUUID(), taskId: task.id, workerId: input.dataset.workerId, projectId: task.projectId, work_date: today, hh, is_rework: isReworkTask, validated: true };
+                    const entry = { id: crypto.randomUUID(), taskId: task.id, workerId: input.dataset.workerId, projectId: task.projectId, work_date: selectedDate, hh, is_rework: isReworkTask, validated: true };
                     const saved = await dbInsertTimeEntry(entry);
                     state.timeEntries.push(saved);
                 }
@@ -4814,31 +4819,95 @@
             const rackCount = tasks => tasks.reduce((sum, task) => sum + (Number(task.quantity) || 0), 0);
             const repairedRacks = rackCount(repairTasks);
             const paintedRacks = rackCount(paintTasks);
+
+            const getTaskModeId = task => {
+                const workerNames = (task.workerIds || [])
+                    .map(workerId => state.workers.find(worker => worker.id === workerId)?.name || '')
+                    .map(normalizeStageText);
+                const hasSubcontract = workerNames.some(name => name.includes('subcontrato') || name.includes('sub contrato'));
+                const hasInternalDeal = workerNames.some(name => name.includes('trato interno'));
+                return hasSubcontract && hasInternalDeal ? 'mixed'
+                    : hasSubcontract ? 'subcontract'
+                    : hasInternalDeal ? 'internalDeal'
+                    : workerNames.length ? 'internal' : 'mixed';
+            };
+            const getTaskRackMark = task => {
+                const element = projectElements.find(item => item.id === task.elementId)
+                    || state.elements.find(item => item.id === task.elementId)
+                    || state.elements.find(item => item.id === state.parts.find(part => part.id === task.partId)?.elementId);
+                return element?.mark || '';
+            };
+            const addRackMarkQuantity = (markMap, task) => {
+                const mark = getTaskRackMark(task);
+                if (!mark) return;
+                markMap.set(mark, (markMap.get(mark) || 0) + (Number(task.quantity) || 0));
+            };
             const modeDefinitions = [
                 { id: 'subcontract', label: 'Subcontrato' },
                 { id: 'internalDeal', label: 'Trato interno' },
                 { id: 'internal', label: 'Personal interno' },
                 { id: 'mixed', label: 'Mixto / sin clasificar' }
             ];
-            const modes = Object.fromEntries(modeDefinitions.map(mode => [mode.id, { ...mode, racks: 0, kg: 0, hh: 0 }]));
+            const modes = Object.fromEntries(modeDefinitions.map(mode => [mode.id, { ...mode, racks: 0, kg: 0, hh: 0, repairMarks: new Map(), paintMarks: new Map(), responsibles: new Map() }]));
+
+            const getResponsibleNames = (task, modeId) => {
+                const assignedWorkers = (task.workerIds || [])
+                    .map(workerId => state.workers.find(worker => worker.id === workerId))
+                    .filter(Boolean);
+                if (modeId === 'internalDeal') {
+                    const responsibleName = String(task.instructions || '').trim();
+                    return responsibleName ? [responsibleName] : ['Trato interno sin responsable indicado'];
+                }
+                const isMarker = worker => {
+                    const name = normalizeStageText(worker.name);
+                    return name.includes('subcontrato') || name.includes('sub contrato') || name.includes('trato interno');
+                };
+                if (modeId === 'subcontract') {
+                    const contractors = assignedWorkers.filter(worker => {
+                        const name = normalizeStageText(worker.name);
+                        return name.includes('subcontrato') || name.includes('sub contrato');
+                    }).map(worker => worker.name);
+                    return contractors.length ? contractors : ['Subcontrato sin identificar'];
+                }
+                const employees = assignedWorkers.filter(worker => !isMarker(worker)).map(worker => worker.name);
+                if (employees.length) return employees;
+                if (modeId === 'mixed') return ['Mixto / sin clasificar'];
+                return ['Trabajador no identificado'];
+            };
+
+            const addTaskToResponsible = (mode, task, markField) => {
+                const mark = getTaskRackMark(task);
+                if (!mark) return;
+                const names = getResponsibleNames(task, mode.id);
+                names.forEach(responsibleName => {
+                    if (!mode.responsibles.has(responsibleName)) {
+                        mode.responsibles.set(responsibleName, { name: responsibleName, repairMarks: new Map(), paintMarks: new Map() });
+                    }
+                    const marks = mode.responsibles.get(responsibleName)[markField];
+                    marks.set(mark, (marks.get(mark) || 0) + (Number(task.quantity) || 0));
+                });
+            };
 
             repairTasks.forEach(task => {
-                const workerNames = (task.workerIds || [])
-                    .map(workerId => state.workers.find(worker => worker.id === workerId)?.name || '')
-                    .map(normalizeStageText);
-                const hasSubcontract = workerNames.some(name => name.includes('subcontrato') || name.includes('sub contrato'));
-                const hasInternalDeal = workerNames.some(name => name.includes('trato interno'));
-                const modeId = hasSubcontract && hasInternalDeal ? 'mixed'
-                    : hasSubcontract ? 'subcontract'
-                    : hasInternalDeal ? 'internalDeal'
-                    : workerNames.length ? 'internal' : 'mixed';
-                const mode = modes[modeId];
+                const mode = modes[getTaskModeId(task)];
                 mode.racks += Number(task.quantity) || 0;
                 mode.kg += getTaskWeightContribution(task, projectElements);
+                addRackMarkQuantity(mode.repairMarks, task);
+                addTaskToResponsible(mode, task, 'repairMarks');
                 mode.hh += state.timeEntries
                     .filter(entry => entry.taskId === task.id)
                     .reduce((sum, entry) => sum + (Number(entry.hh) || 0), 0);
             });
+
+            paintTasks.forEach(task => {
+                const mode = modes[getTaskModeId(task)];
+                addRackMarkQuantity(mode.paintMarks, task);
+                addTaskToResponsible(mode, task, 'paintMarks');
+            });
+            const completedRepairOrPaintMarks = new Set([...repairTasks, ...paintTasks].map(getTaskRackMark).filter(Boolean));
+            const noWorkMarks = projectElements
+                .filter(element => !completedRepairOrPaintMarks.has(element.mark))
+                .map(element => element.mark);
 
             return {
                 repairStageName: repairStage.name,
@@ -4849,6 +4918,7 @@
                 waitingRepair: Math.max(0, totalRacks - repairedRacks),
                 waitingPaint: Math.max(0, repairedRacks - paintedRacks),
                 repairTasks,
+                noWorkMarks,
                 modes: modeDefinitions.map(mode => modes[mode.id])
             };
         }
@@ -4867,16 +4937,25 @@
             const summary = getRackRepairSummary(project, projectStages, projectElements);
             if (!summary) { alert('Esta OT no tiene etapas configuradas de reparación de rack y pintura.'); return; }
 
+            const formatRackMarks = markMap => Array.from(markMap.entries())
+                .map(([mark, quantity]) => `${escapeReportText(mark)}${quantity > 1 ? ` (×${quantity})` : ''}`)
+                .join(', ') || '—';
+            const countRackMarks = markMap => Array.from(markMap.values()).reduce((sum, quantity) => sum + quantity, 0);
             const modesRows = summary.modes.map(mode => {
                 const tons = mode.kg / 1000;
                 const hhPerTon = tons > 0 ? (mode.hh / tons).toFixed(1) : '—';
-                return `<tr><td>${escapeReportText(mode.label)}</td><td>${mode.racks}</td><td>${mode.kg.toLocaleString('es-CL', { maximumFractionDigits: 1 })}</td><td>${mode.hh.toFixed(1)}</td><td>${hhPerTon}</td></tr>`;
+                return `<tr><td><strong>${escapeReportText(mode.label)}</strong></td><td>${mode.racks}</td><td>${mode.kg.toLocaleString('es-CL', { maximumFractionDigits: 1 })}</td><td>${mode.hh.toFixed(1)}</td><td>${hhPerTon}</td></tr>`;
             }).join('');
+            const responsibleRows = summary.modes.flatMap(mode => Array.from(mode.responsibles.values())
+                .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                .map(responsible => `<tr><td>${escapeReportText(mode.label)}</td><td>${escapeReportText(responsible.name)}</td><td>${countRackMarks(responsible.repairMarks)}</td><td>${formatRackMarks(responsible.repairMarks)}</td><td>${countRackMarks(responsible.paintMarks)}</td><td>${formatRackMarks(responsible.paintMarks)}</td></tr>`)
+            ).join('');
+            const noWorkMarks = summary.noWorkMarks.map(mark => escapeReportText(mark)).join(', ') || 'Ninguno';
             const reportWindow = window.open('', '_blank');
             if (!reportWindow) { alert('Permite ventanas emergentes para abrir el informe imprimible.'); return; }
             reportWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe Reparación Rack OT ${escapeReportText(project.otCode)}</title><style>
-                body{font-family:Arial,sans-serif;color:#17202a;margin:28px;font-size:12px}h1{margin:0 0 6px;color:#166a5b;font-size:22px}h2{margin:22px 0 8px;font-size:14px;color:#166a5b}.meta{color:#5b6672;margin-bottom:18px}.kpis{display:flex;gap:10px;margin:16px 0}.kpi{flex:1;padding:12px;border:1px solid #d8dee6;border-radius:6px}.kpi strong{display:block;font-size:22px;color:#166a5b}.kpi span{color:#5b6672}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border:1px solid #d8dee6;text-align:left}th{background:#eef2f5;text-transform:uppercase;font-size:10px}.foot{margin-top:20px;color:#5b6672;font-size:10px}@media print{body{margin:12mm}}
-            </style></head><body><h1>Informe de Reparación de Rack</h1><div class="meta">OT ${escapeReportText(project.otCode)} - ${escapeReportText(project.projectName)} · Cliente: ${escapeReportText(project.clientName || 'Sin cliente')} · Fecha: ${new Date().toLocaleDateString('es-CL')}</div><div class="kpis"><div class="kpi"><strong>${summary.repairedRacks}</strong><span>Racks reparados</span></div><div class="kpi"><strong>${summary.paintedRacks}</strong><span>Pintados / listos para despacho</span></div><div class="kpi"><strong>${summary.waitingRepair}</strong><span>Pendientes de reparación</span></div><div class="kpi"><strong>${summary.waitingPaint}</strong><span>Reparados pendientes de pintura</span></div></div><h2>Reparación por modalidad</h2><table><thead><tr><th>Modalidad</th><th>Racks reparados</th><th>Kg reparados</th><th>HH registradas</th><th>HH/ton</th></tr></thead><tbody>${modesRows}</tbody></table><div class="foot">Las HH consideran todos los recursos asignados y sus registros de tiempo.</div></body></html>`);
+                body{font-family:Arial,sans-serif;color:#17202a;margin:28px;font-size:12px}h1{margin:0 0 6px;color:#166a5b;font-size:22px}h2{margin:22px 0 8px;font-size:14px;color:#166a5b}.meta{color:#5b6672;margin-bottom:18px}.kpis{display:flex;gap:10px;margin:16px 0}.kpi{flex:1;padding:12px;border:1px solid #d8dee6;border-radius:6px}.kpi strong{display:block;font-size:22px;color:#166a5b}.kpi span{color:#5b6672}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border:1px solid #d8dee6;text-align:left}th{background:#eef2f5;text-transform:uppercase;font-size:10px}.no-work{margin-top:12px;padding:8px 10px;background:#f6f7f9;border:1px solid #d8dee6;border-radius:4px}.foot{margin-top:12px;color:#5b6672;font-size:10px}@media print{body{margin:12mm}}
+            </style></head><body><h1>Informe de Reparación de Rack</h1><div class="meta">OT ${escapeReportText(project.otCode)} - ${escapeReportText(project.projectName)} · Cliente: ${escapeReportText(project.clientName || 'Sin cliente')} · Fecha: ${new Date().toLocaleDateString('es-CL')}</div><div class="kpis"><div class="kpi"><strong>${summary.repairedRacks}</strong><span>Racks reparados</span></div><div class="kpi"><strong>${summary.paintedRacks}</strong><span>Pintados / listos para despacho</span></div><div class="kpi"><strong>${summary.waitingRepair}</strong><span>Pendientes de reparación</span></div><div class="kpi"><strong>${summary.waitingPaint}</strong><span>Reparados pendientes de pintura</span></div></div><h2>Reparación por modalidad</h2><table><thead><tr><th>Modalidad</th><th>Racks reparados</th><th>Kg reparados</th><th>HH registradas</th><th>HH/ton</th></tr></thead><tbody>${modesRows}</tbody></table><h2>Detalle de marcas por responsable</h2><table><thead><tr><th>Modalidad</th><th>Responsable</th><th>Cant. reparados</th><th>Marcas reparadas</th><th>Cant. pintados</th><th>Marcas pintadas</th></tr></thead><tbody>${responsibleRows || '<tr><td colspan="6">Sin tareas terminadas por responsable.</td></tr>'}</tbody></table><div class="no-work"><strong>Sin reparación ni pintura terminada:</strong> ${noWorkMarks}</div><div class="foot">Las HH consideran todos los recursos asignados y sus registros de tiempo.</div></body></html>`);
             reportWindow.document.close();
             reportWindow.focus();
             setTimeout(() => reportWindow.print(), 250);
@@ -7537,6 +7616,8 @@
             </div>`;
             }).join('');
 
+            const taskDefaultDate = taskTimeEntries.length ? taskTimeEntries.map(te => te.work_date).sort().at(-1) : new Date().toISOString().split('T')[0];
+
             const modalHtml = `
             <div id="edit-closed-task-modal" class="modal-overlay active" onclick="if(event.target===this)closeEditClosedTaskModal()">
                 <div class="modal-content" style="max-width:600px;">
@@ -7554,6 +7635,10 @@
                         </div>
                     </div>
                     <form id="edit-closed-task-form">
+                        <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:12px;padding:8px 10px;background:#f6f7f9;border:1px solid var(--line);border-radius:6px;">
+                            <label style="font-size:12px;font-weight:700;color:var(--muted);margin:0;">Fecha de término</label>
+                            <input type="date" name="task-close-date" value="${taskDefaultDate}" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:4px;">
+                        </div>
                         <label style="display:block;margin-bottom:12px;font-weight:700;color:var(--muted);font-size:13px;">Registro de HH por Trabajador</label>
                         <div style="max-height:300px;overflow-y:auto;margin-bottom:16px;">
                             ${workersHtml || '<p style="color:var(--muted);font-size:13px;">No hay registros de HH.</p>'}
@@ -7587,6 +7672,7 @@
 
             const form = document.getElementById('edit-closed-task-form');
             const instructions = form.querySelector('textarea[name="instructions"]').value;
+            const selectedDate = form.querySelector('input[name="task-close-date"]')?.value || new Date().toISOString().split('T')[0];
 
             try {
                 // Actualizar instrucciones de la tarea
@@ -7599,11 +7685,14 @@
                     const newHh = parseFloat(input.value) || 0;
 
                     if (newHh > 0) {
-                        await db.from('time_entries').update({ hh: newHh }).eq('id', entryId);
+                        await db.from('time_entries').update({ hh: newHh, work_date: selectedDate }).eq('id', entryId);
 
                         // Actualizar estado local
                         const entry = state.timeEntries.find(te => te.id === entryId);
-                        if (entry) entry.hh = newHh;
+                        if (entry) {
+                            entry.hh = newHh;
+                            entry.work_date = selectedDate;
+                        }
                     }
                 }
 
