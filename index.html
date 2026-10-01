@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema MetalWorking v12 — Supabase</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -296,6 +297,79 @@
             margin-top: 10px;
         }
 
+        .marks-fullscreen-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1200;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+            background: var(--bg);
+        }
+
+        .marks-fullscreen-overlay.active {
+            display: flex;
+        }
+
+        .marks-fullscreen-header,
+        .marks-fullscreen-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 16px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        .marks-fullscreen-header h2 {
+            margin: 0;
+        }
+
+        .marks-fullscreen-header small,
+        .marks-fullscreen-toolbar span {
+            color: var(--muted);
+        }
+
+        .marks-fullscreen-toolbar input {
+            width: min(420px, 70vw);
+        }
+
+        .marks-fullscreen-table-wrap {
+            flex: 1;
+            min-height: 0;
+            max-height: none;
+            margin: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .marks-fullscreen-table-wrap table {
+            min-width: 720px;
+        }
+
+        @media (max-width: 600px) {
+            .marks-fullscreen-overlay {
+                padding: 8px;
+                gap: 8px;
+            }
+
+            .marks-fullscreen-header,
+            .marks-fullscreen-toolbar {
+                padding: 10px;
+            }
+
+            .marks-fullscreen-toolbar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .marks-fullscreen-toolbar input {
+                width: 100%;
+            }
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -365,12 +439,114 @@
         .project-header-clickable {
             padding: 16px;
             cursor: pointer;
+            position: relative;
             display: flex;
             flex-direction: column;
             gap: 12px;
             transition: background 0.15s;
         }
         .project-header-clickable:hover { background: #f9fafb; }
+
+        .rack-repair-summary {
+            grid-column: 3;
+            grid-row: 1;
+            width: 100%;
+            padding: 9px 11px;
+            border: 1px solid #b8dfd3;
+            border-radius: 6px;
+            background: #f4faf7;
+            cursor: default;
+        }
+
+        .project-header-main-rack-repair {
+            display: grid !important;
+            grid-template-columns: minmax(180px, 0.9fr) minmax(300px, 1.25fr) minmax(350px, 1.5fr);
+            align-items: start !important;
+        }
+
+        .project-header-main-rack-repair > div:nth-child(2) {
+            min-width: 0;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .project-header-main-rack-repair > div:nth-child(2) > div:first-child {
+            min-width: 0;
+            justify-content: flex-end;
+        }
+
+        .rack-repair-summary-head,
+        .rack-repair-summary-counts,
+        .rack-repair-mode {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .rack-repair-summary-head {
+            margin-bottom: 7px;
+            color: var(--primary-strong);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .rack-repair-summary-head button {
+            padding: 3px 7px;
+            font-size: 10px;
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #fff;
+        }
+
+        .rack-repair-summary-counts {
+            justify-content: flex-start;
+            margin-bottom: 6px;
+        }
+
+        .rack-repair-summary-counts > div {
+            min-width: 85px;
+            padding: 4px 7px;
+            border-radius: 4px;
+            background: #fff;
+            border: 1px solid var(--line);
+        }
+
+        .rack-repair-summary-counts strong,
+        .rack-repair-summary-counts small {
+            display: block;
+        }
+
+        .rack-repair-summary-counts strong {
+            color: var(--ink);
+            font-size: 14px;
+        }
+
+        .rack-repair-summary-counts small,
+        .rack-repair-mode {
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .rack-repair-mode + .rack-repair-mode {
+            margin-top: 3px;
+        }
+
+        .rack-repair-mode strong {
+            color: var(--ink);
+        }
+
+        @media (max-width: 1150px) {
+            .project-header-main-rack-repair {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .rack-repair-summary {
+                grid-column: 1;
+                grid-row: auto;
+            }
+        }
 
         .project-body {
             display: none;
@@ -1419,9 +1595,10 @@
                                 style="color: var(--primary);">Ninguno</span></h2>
                     </div>
                     <div id="csv-upload-section" style="display: none;">
-                        <p style="font-size: 13px; color: var(--muted);">Sube el archivo CSV estándar de componentes.
+                        <p style="font-size: 13px; color: var(--muted);">Sube el archivo CSV o Excel (.csv, .xlsx) de componentes.
                         </p>
-                        <input type="file" id="csv-upload" accept=".csv" style="margin: 10px 0;">
+                        <input type="file" id="csv-upload" accept=".csv,.xlsx" style="margin: 10px 0;">
+                        <div id="csv-upload-project-label" style="font-size:12px;color:var(--muted);margin-bottom:8px;"></div>
                         <button id="btn-process-csv" class="primary wide">Procesar Archivo</button>
                         <div id="csv-result"></div>
                         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line);">
@@ -1436,23 +1613,28 @@
                         <div class="panel-head">
                             <h2>Elementos Cargados</h2><span id="elements-count">0 marcas</span>
                         </div>
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Marca</th>
-                                        <th>Cant.</th>
-                                        <th>Kg Unit.</th>
-                                        <th>Kg Total</th>
-                                        <th>Estado</th>
-                                        <th>Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="elements-table"></tbody>
-                                <tfoot id="elements-foot"></tfoot>
-                            </table>
-                        </div>
+                        <button type="button" class="primary wide" onclick="openElementsFullscreen()">Ver marcas cargadas a pantalla completa</button>
                     </div>
+                </div>
+            </div>
+            <div id="elements-fullscreen-modal" class="marks-fullscreen-overlay" aria-hidden="true" onclick="if(event.target===this)closeElementsFullscreen()">
+                <div class="marks-fullscreen-header">
+                    <div>
+                        <small>Elementos cargados</small>
+                        <h2 id="elements-fullscreen-project">OT</h2>
+                    </div>
+                    <button type="button" onclick="closeElementsFullscreen()" aria-label="Cerrar listado de marcas" title="Cerrar">✕</button>
+                </div>
+                <div class="marks-fullscreen-toolbar">
+                    <input id="elements-mark-search" type="search" placeholder="Buscar marca..." oninput="filterElementsFullscreen()">
+                    <span id="elements-fullscreen-visible-count"></span>
+                </div>
+                <div class="table-wrap marks-fullscreen-table-wrap">
+                    <table>
+                        <thead><tr><th>Marca</th><th>Cant.</th><th>Kg Unit.</th><th>Kg Total</th><th>Estado</th><th>Acción</th></tr></thead>
+                        <tbody id="elements-fullscreen-table"></tbody>
+                        <tfoot id="elements-fullscreen-foot"></tfoot>
+                    </table>
                 </div>
             </div>
 
@@ -2563,6 +2745,8 @@
         // ════════════════════════════════════════════════════════
         let state = { projects: [], workers: [], elements: [], parts: [], tasks: [], timeEntries: [], inspections: [] };
         let currentProjectId = null;
+        let csvFileProjectId = null;
+        let isComponentImporting = false;
         let taskToCloseId = null;
         let currentUser = null;      // objeto Supabase Auth user
         let currentRole = null;      // 'Admin' | 'Supervisor' | 'Operaciones' | 'Inspector de calidad' | 'Gerencia'
@@ -2800,6 +2984,7 @@
 
         document.getElementById("new-project-form").addEventListener("submit", async (e) => {
             e.preventDefault();
+            if (isComponentImporting) { alert('Espera a que termine la carga de archivos antes de crear otra OT.'); return; }
             const formEl = e.currentTarget;
             const form = new FormData(formEl);
             const otCode = form.get("otCode").trim();
@@ -2825,13 +3010,45 @@
             try {
                 const saved = await dbInsertProject(newProject, selectedStages);
                 state.projects.push(saved);
-                formEl.reset(); currentProjectId = saved.id; renderAll();
+                formEl.reset(); currentProjectId = saved.id; resetCsvImportState(); renderAll();
             } catch (err) { /* manejado en dbInsertProject */ }
         });
 
-        function selectProject(projectId) { currentProjectId = projectId; renderAll(); }
+        function updateCsvUploadProjectLabel(message = null) {
+            const label = document.getElementById('csv-upload-project-label');
+            if (!label) return;
+            if (message !== null) { label.textContent = message; return; }
+            const project = state.projects.find(p => p.id === currentProjectId);
+            const file = document.getElementById('csv-upload')?.files?.[0];
+            label.textContent = !project ? '' : file && csvFileProjectId === project.id
+                ? `${file.name} asociado a OT ${project.otCode}.`
+                : `El próximo archivo se cargará en OT ${project.otCode}.`;
+        }
+
+        function resetCsvImportState() {
+            const fileInput = document.getElementById('csv-upload');
+            if (fileInput) fileInput.value = '';
+            csvFileProjectId = null;
+            const result = document.getElementById('csv-result');
+            if (result) result.innerHTML = '';
+            updateCsvUploadProjectLabel();
+        }
+
+        function selectProject(projectId) {
+            if (isComponentImporting && currentProjectId !== projectId) {
+                alert('Espera a que termine la carga de archivos antes de cambiar de OT.');
+                return;
+            }
+            if (currentProjectId !== projectId) {
+                currentProjectId = projectId;
+                resetCsvImportState();
+                if (typeof window.closeElementsFullscreen === 'function') window.closeElementsFullscreen();
+            }
+            renderAll();
+        }
 
         window.deleteProject = async (projectId) => {
+            if (isComponentImporting) { alert('No se puede eliminar una OT mientras se están cargando sus archivos.'); return; }
             if (!canDelete()) { alert('⛔ Solo el rol Admin puede eliminar proyectos.'); return; }
             const project = state.projects.find(p => p.id === projectId);
             if (!project) return;
@@ -2844,7 +3061,11 @@
                     state.tasks = state.tasks.filter(t => t.projectId !== projectId);
                     state.timeEntries = state.timeEntries.filter(te => te.projectId !== projectId);
                     state.inspections = state.inspections.filter(i => i.projectId !== projectId);
-                    if (currentProjectId === projectId) currentProjectId = state.projects.length > 0 ? state.projects[0].id : null;
+                    if (currentProjectId === projectId) {
+                        currentProjectId = state.projects.length > 0 ? state.projects[0].id : null;
+                        resetCsvImportState();
+                        if (typeof window.closeElementsFullscreen === 'function') window.closeElementsFullscreen();
+                    }
                     renderAll();
                 } catch (err) { /* manejado en dbDeleteProject */ }
             }
@@ -3069,29 +3290,114 @@
         // 📋  CARGA CSV CON DIFF
         // ════════════════════════════════════════════════════════
 
-        document.getElementById("btn-process-csv").addEventListener("click", () => {
-            const fileInput = document.getElementById("csv-upload");
-            if (!fileInput.files.length) { alert("Selecciona un archivo CSV primero."); return; }
-            const reader = new FileReader();
-            reader.onload = (e) => { parseAndLoadCSVWithDiff(e.target.result); };
-            reader.readAsText(fileInput.files[0]);
+        function findUnsupportedUnicodeIndex(text) {
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                if (code === 0) return i;
+                if (code >= 0xD800 && code <= 0xDBFF) {
+                    const next = text.charCodeAt(i + 1);
+                    if (next < 0xDC00 || next > 0xDFFF) return i;
+                    i++;
+                } else if (code >= 0xDC00 && code <= 0xDFFF) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        async function readComponentFileRows(file) {
+            if (!window.XLSX) throw new Error('No se pudo cargar el lector de archivos Excel. Revisa tu conexión e inténtalo de nuevo.');
+
+            let workbook;
+            if (file.name.toLowerCase().endsWith('.xlsx')) {
+                workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+            } else if (file.name.toLowerCase().endsWith('.csv')) {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                let text;
+                if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+                    text = new TextDecoder('utf-16le').decode(bytes);
+                } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+                    text = new TextDecoder('utf-16be').decode(bytes);
+                } else {
+                    try {
+                        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+                    } catch {
+                        text = new TextDecoder('windows-1252').decode(bytes);
+                    }
+                }
+                const firstDataLine = text.split(/\r\n|\r|\n/).find(line => line.trim() && !line.includes('---') && !line.includes('CONJUNTO') && !line.includes('PROYECTO')) || '';
+                const separator = (firstDataLine.match(/\t/g) || []).length > (firstDataLine.match(/;/g) || []).length ? '\t' : ';';
+                workbook = XLSX.read(text, { type: 'string', FS: separator });
+            } else {
+                throw new Error('Formato no compatible. Selecciona un archivo CSV o XLSX.');
+            }
+
+            const firstSheetName = workbook.SheetNames[0];
+            if (!firstSheetName) throw new Error('El archivo no contiene hojas con datos.');
+            return XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1, raw: false, defval: '' });
+        }
+
+        document.getElementById('csv-upload').addEventListener('change', (event) => {
+            if (isComponentImporting) return;
+            csvFileProjectId = event.target.files.length ? currentProjectId : null;
+            const result = document.getElementById('csv-result');
+            if (result) result.innerHTML = '';
+            updateCsvUploadProjectLabel();
         });
 
-        async function parseAndLoadCSVWithDiff(text) {
-            // Detectar separador: tabulacion o punto y coma
-            const firstDataLine = text.split('\n').find(l => l.trim() && !l.includes('---') && !l.includes('CONJUNTO') && !l.includes('PROYECTO'));
-            const separator = firstDataLine && firstDataLine.includes('\t') ? '\t' : ';';
+        document.getElementById("btn-process-csv").addEventListener("click", async () => {
+            const fileInput = document.getElementById("csv-upload");
+            if (!fileInput.files.length) { alert("Selecciona un archivo CSV o XLSX primero."); return; }
+            if (!currentProjectId || csvFileProjectId !== currentProjectId) {
+                alert('Selecciona nuevamente el archivo para la OT activa antes de procesarlo.');
+                return;
+            }
+            if (isComponentImporting) return;
+            const button = document.getElementById('btn-process-csv');
+            const project = state.projects.find(p => p.id === currentProjectId);
+            isComponentImporting = true;
+            button.disabled = true;
+            fileInput.disabled = true;
+            updateCsvUploadProjectLabel(`Procesando archivo para OT ${project?.otCode || ''}...`);
+            try {
+                const rows = await readComponentFileRows(fileInput.files[0]);
+                await parseAndLoadCSVWithDiff(rows);
+            } catch (err) {
+                console.error('Error al leer archivo de componentes:', err);
+                alert('Error al leer el archivo: ' + (err.message || err));
+            } finally {
+                isComponentImporting = false;
+                button.disabled = false;
+                fileInput.disabled = false;
+                updateCsvUploadProjectLabel();
+            }
+        });
 
-            const lines = text.split('\n').filter(l => l.trim() && !l.includes('---') && !l.includes('LISTADO') && !l.includes('PROYECTO') && !l.includes('MODELO') && !l.includes('TOTAL:') && !l.includes('CONJUNTO') && !l.includes('PARTE'));
+        async function parseAndLoadCSVWithDiff(rows) {
+            const invalidRowIndex = rows.findIndex(row => row.some(cell => findUnsupportedUnicodeIndex(String(cell ?? '')) >= 0));
+            if (invalidRowIndex >= 0) {
+                alert(`El archivo contiene un carácter Unicode no compatible en la fila ${invalidRowIndex + 1}. Corrige esa fila y vuelve a intentarlo. No se cargaron cambios.`);
+                return;
+            }
+
+            const dataRows = rows.map((row, index) => ({ row, sourceRow: index + 1 })).filter(({ row }) => {
+                const line = row.map(cell => String(cell ?? '')).join(';');
+                return line.trim() && !line.includes('---') && !line.includes('LISTADO') && !line.includes('PROYECTO') && !line.includes('MODELO') && !line.includes('TOTAL:') && !line.includes('CONJUNTO') && !line.includes('PARTE');
+            });
             const parsedElementsMap = new Map(); const parsedPartsMap = new Map(); let currentMark = null;
+            let invalidQuantityRow = null;
 
-            lines.forEach(line => {
-                const cols = line.split(separator).map(c => c.trim());
+            dataRows.forEach(({ row, sourceRow }) => {
+                const cols = row.map(cell => String(cell ?? '').trim());
                 if (cols.length < 3) return;
 
                 let mark = cols[0] || '';
                 const partCode = cols[1] || '';
-                const qtyInRow = parseFloat(cols[2]) || 1;
+                const qtyInRow = cols[2] ? Number(cols[2].replace(',', '.')) : 1;
+                if (!Number.isInteger(qtyInRow) || qtyInRow <= 0) {
+                    invalidQuantityRow = invalidQuantityRow || sourceRow;
+                    return;
+                }
                 const profile = cols[3] || '';
                 const length = parseFloat((cols[4] || '').replace(',', '.')) || 0;
                 const area = parseFloat((cols[5] || '').replace(',', '.')) || 0;
@@ -3152,8 +3458,8 @@
                         partUnitWeight = qtyInRow > 0 ? partTotalWeight / qtyInRow : 0;
                     }
 
-                    const totalQty = qtyInRow;
-                    const qtyPerElement = elementQty > 0 ? (totalQty / elementQty) : 0;
+                    const qtyPerElement = qtyInRow;
+                    const totalQty = qtyPerElement * elementQty;
 
                     parsedPartsMap.get(mark).push({
                         partCode,
@@ -3167,6 +3473,11 @@
                     });
                 }
             });
+
+            if (invalidQuantityRow !== null) {
+                alert(`La cantidad debe ser un entero mayor a 0. Revisa la fila ${invalidQuantityRow}. No se cargaron cambios.`);
+                return;
+            }
 
             const project = state.projects.find(p => p.id === currentProjectId);
             const existingElements = state.elements.filter(e => e.projectId === currentProjectId);
@@ -4330,6 +4641,67 @@
             }
         }
 
+        function renderElementsFullscreenTable(projectElements) {
+            const tableBody = document.getElementById('elements-fullscreen-table');
+            if (!tableBody) return;
+            const query = (document.getElementById('elements-mark-search')?.value || '').trim().toLowerCase();
+            const visibleElements = projectElements.filter(element => !query || String(element.mark || '').toLowerCase().includes(query));
+            const tableFoot = document.getElementById('elements-fullscreen-foot');
+            const visibleCount = document.getElementById('elements-fullscreen-visible-count');
+
+            tableBody.innerHTML = visibleElements.length ? visibleElements.map(element => {
+                const procStatus = typeof computeElementStatus === 'function' ? computeElementStatus(element.id) : 'Pendiente';
+                const badgeHtml = typeof elementStatusBadge === 'function' ? elementStatusBadge(procStatus) : procStatus;
+                return `<tr>
+                    <td><strong>${element.mark}</strong></td>
+                    <td>${element.quantity}</td>
+                    <td>${element.unit_weight_kg.toFixed(1)}</td>
+                    <td>${element.total_weight_kg.toFixed(1)}</td>
+                    <td>${badgeHtml}</td>
+                    <td style="display:flex;gap:4px;">
+                        ${typeof isReadOnly === 'function' && !isReadOnly() ? `<button onclick="openEditElement('${element.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''}
+                        ${typeof canDelete === 'function' && canDelete() ? `<button onclick="deleteElement('${element.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
+                    </td>
+                </tr>`;
+            }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">${query ? 'No hay marcas que coincidan con la búsqueda.' : 'No hay marcas cargadas en esta OT.'}</td></tr>`;
+
+            if (tableFoot) {
+                const visibleQty = visibleElements.reduce((sum, element) => sum + element.quantity, 0);
+                const visibleKg = visibleElements.reduce((sum, element) => sum + element.total_weight_kg, 0);
+                tableFoot.innerHTML = visibleElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td>${visibleQty}</td><td>—</td><td>${visibleKg.toFixed(1)}</td><td></td><td></td></tr>` : '';
+            }
+            if (visibleCount) visibleCount.textContent = query ? `${visibleElements.length} de ${projectElements.length} marcas` : `${projectElements.length} marcas`;
+        }
+
+        let elementsFullscreenPreviousOverflow = '';
+        window.filterElementsFullscreen = () => {
+            renderElementsFullscreenTable(state.elements.filter(element => element.projectId === currentProjectId));
+        };
+        window.openElementsFullscreen = () => {
+            if (!currentProjectId) return;
+            const modal = document.getElementById('elements-fullscreen-modal');
+            const search = document.getElementById('elements-mark-search');
+            if (!modal) return;
+            elementsFullscreenPreviousOverflow = document.body.style.overflow;
+            modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            if (search) { search.value = ''; search.focus(); }
+            renderElementsFullscreenTable(state.elements.filter(element => element.projectId === currentProjectId));
+        };
+        window.closeElementsFullscreen = () => {
+            const modal = document.getElementById('elements-fullscreen-modal');
+            if (!modal) return;
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = elementsFullscreenPreviousOverflow;
+        };
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && document.getElementById('elements-fullscreen-modal')?.classList.contains('active')) {
+                closeElementsFullscreen();
+            }
+        });
+
         function renderProjects() {
             const container = document.getElementById("projects-list-container");
             if (!container) return;
@@ -4357,11 +4729,13 @@
             const csvSection = document.getElementById("csv-upload-section");
             const noProject = document.getElementById("no-project-selected");
             const elementsSection = document.getElementById("elements-section");
-            const elementsTable = document.getElementById("elements-table");
-            const elementsFoot = document.getElementById("elements-foot");
+            const elementsTable = document.getElementById("elements-fullscreen-table");
 
             if (project) {
                 document.getElementById("active-project-name").textContent = `OT ${project.otCode} - ${project.projectName}`;
+                const fullscreenProjectName = document.getElementById('elements-fullscreen-project');
+                if (fullscreenProjectName) fullscreenProjectName.textContent = `OT ${project.otCode} - ${project.projectName}`;
+                updateCsvUploadProjectLabel();
                 if(csvSection) csvSection.style.display = 'block';
                 if(noProject) noProject.style.display = 'none';
                 if(elementsSection) elementsSection.style.display = 'block';
@@ -4373,27 +4747,7 @@
                 const sumQty = pElements.reduce((s, e) => s + e.quantity, 0);
                 const sumKgTotal = pElements.reduce((s, e) => s + e.total_weight_kg, 0);
                 
-                if (elementsTable) {
-                    elementsTable.innerHTML = pElements.map(e => {
-                        const procStatus = typeof computeElementStatus === 'function' ? computeElementStatus(e.id) : 'Pendiente';
-                        const badgeHtml = typeof elementStatusBadge === 'function' ? elementStatusBadge(procStatus) : procStatus;
-                        return `<tr>
-                        <td><strong>${e.mark}</strong></td>
-                        <td>${e.quantity}</td>
-                        <td>${e.unit_weight_kg.toFixed(1)}</td>
-                        <td>${e.total_weight_kg.toFixed(1)}</td>
-                        <td>${badgeHtml}</td>
-                        <td style="display:flex;gap:4px;">
-                            ${typeof isReadOnly === 'function' && !isReadOnly() ? `<button onclick="openEditElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''}
-                            ${typeof canDelete === 'function' && canDelete() ? `<button onclick="deleteElement('${e.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
-                        </td>
-                        </tr>`;
-                    }).join('');
-                }
-                
-                if (elementsFoot) {
-                    elementsFoot.innerHTML = pElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td>${sumQty}</td><td>—</td><td>${sumKgTotal.toFixed(1)}</td><td></td><td></td></tr>` : '';
-                }
+                if (elementsTable) renderElementsFullscreenTable(pElements);
 
                 // If project dual progress exists, render it (fallback check)
                 const dualProgressContainer = document.getElementById("project-dual-progress-container");
@@ -4441,6 +4795,91 @@
                 return parseFloat((p.budgetedHhTon * (totalKg / 1000)).toFixed(1));
             }
             return p.estimatedHh || 0;
+        };
+
+        function getRackRepairSummary(project, projectStages, projectElements) {
+            const stageNames = projectStages.map(stage => stage.name);
+            const projectHasRack = normalizeStageText(project.projectName).includes('rack');
+            const repairStage = projectStages.find(stage => {
+                const name = normalizeStageText(stage.name);
+                return name.includes('reparac') && (name.includes('rack') || projectHasRack);
+            });
+            const paintStage = projectStages.find(stage => normalizeStageText(stage.name).includes('pintur'));
+            if (!repairStage || !paintStage) return null;
+
+            const totalRacks = projectElements.reduce((sum, element) => sum + (Number(element.quantity) || 0), 0);
+            const completedTasks = state.tasks.filter(task => task.projectId === project.id && task.status === 'Terminada' && !task.isRework);
+            const repairTasks = completedTasks.filter(task => isTaskMatchingStage(task.process, repairStage.name, stageNames));
+            const paintTasks = completedTasks.filter(task => isTaskMatchingStage(task.process, paintStage.name, stageNames));
+            const rackCount = tasks => tasks.reduce((sum, task) => sum + (Number(task.quantity) || 0), 0);
+            const repairedRacks = rackCount(repairTasks);
+            const paintedRacks = rackCount(paintTasks);
+            const modeDefinitions = [
+                { id: 'subcontract', label: 'Subcontrato' },
+                { id: 'internalDeal', label: 'Trato interno' },
+                { id: 'internal', label: 'Personal interno' },
+                { id: 'mixed', label: 'Mixto / sin clasificar' }
+            ];
+            const modes = Object.fromEntries(modeDefinitions.map(mode => [mode.id, { ...mode, racks: 0, kg: 0, hh: 0 }]));
+
+            repairTasks.forEach(task => {
+                const workerNames = (task.workerIds || [])
+                    .map(workerId => state.workers.find(worker => worker.id === workerId)?.name || '')
+                    .map(normalizeStageText);
+                const hasSubcontract = workerNames.some(name => name.includes('subcontrato') || name.includes('sub contrato'));
+                const hasInternalDeal = workerNames.some(name => name.includes('trato interno'));
+                const modeId = hasSubcontract && hasInternalDeal ? 'mixed'
+                    : hasSubcontract ? 'subcontract'
+                    : hasInternalDeal ? 'internalDeal'
+                    : workerNames.length ? 'internal' : 'mixed';
+                const mode = modes[modeId];
+                mode.racks += Number(task.quantity) || 0;
+                mode.kg += getTaskWeightContribution(task, projectElements);
+                mode.hh += state.timeEntries
+                    .filter(entry => entry.taskId === task.id)
+                    .reduce((sum, entry) => sum + (Number(entry.hh) || 0), 0);
+            });
+
+            return {
+                repairStageName: repairStage.name,
+                paintStageName: paintStage.name,
+                totalRacks,
+                repairedRacks,
+                paintedRacks,
+                waitingRepair: Math.max(0, totalRacks - repairedRacks),
+                waitingPaint: Math.max(0, repairedRacks - paintedRacks),
+                repairTasks,
+                modes: modeDefinitions.map(mode => modes[mode.id])
+            };
+        }
+
+        function escapeReportText(value) {
+            return String(value ?? '').replace(/[&<>"']/g, character => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[character]);
+        }
+
+        window.printRackRepairReport = (projectId) => {
+            const project = state.projects.find(item => item.id === projectId);
+            if (!project) return;
+            const projectStages = getProjectActiveStages(projectId);
+            const projectElements = state.elements.filter(element => element.projectId === projectId);
+            const summary = getRackRepairSummary(project, projectStages, projectElements);
+            if (!summary) { alert('Esta OT no tiene etapas configuradas de reparación de rack y pintura.'); return; }
+
+            const modesRows = summary.modes.map(mode => {
+                const tons = mode.kg / 1000;
+                const hhPerTon = tons > 0 ? (mode.hh / tons).toFixed(1) : '—';
+                return `<tr><td>${escapeReportText(mode.label)}</td><td>${mode.racks}</td><td>${mode.kg.toLocaleString('es-CL', { maximumFractionDigits: 1 })}</td><td>${mode.hh.toFixed(1)}</td><td>${hhPerTon}</td></tr>`;
+            }).join('');
+            const reportWindow = window.open('', '_blank');
+            if (!reportWindow) { alert('Permite ventanas emergentes para abrir el informe imprimible.'); return; }
+            reportWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe Reparación Rack OT ${escapeReportText(project.otCode)}</title><style>
+                body{font-family:Arial,sans-serif;color:#17202a;margin:28px;font-size:12px}h1{margin:0 0 6px;color:#166a5b;font-size:22px}h2{margin:22px 0 8px;font-size:14px;color:#166a5b}.meta{color:#5b6672;margin-bottom:18px}.kpis{display:flex;gap:10px;margin:16px 0}.kpi{flex:1;padding:12px;border:1px solid #d8dee6;border-radius:6px}.kpi strong{display:block;font-size:22px;color:#166a5b}.kpi span{color:#5b6672}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border:1px solid #d8dee6;text-align:left}th{background:#eef2f5;text-transform:uppercase;font-size:10px}.foot{margin-top:20px;color:#5b6672;font-size:10px}@media print{body{margin:12mm}}
+            </style></head><body><h1>Informe de Reparación de Rack</h1><div class="meta">OT ${escapeReportText(project.otCode)} - ${escapeReportText(project.projectName)} · Cliente: ${escapeReportText(project.clientName || 'Sin cliente')} · Fecha: ${new Date().toLocaleDateString('es-CL')}</div><div class="kpis"><div class="kpi"><strong>${summary.repairedRacks}</strong><span>Racks reparados</span></div><div class="kpi"><strong>${summary.paintedRacks}</strong><span>Pintados / listos para despacho</span></div><div class="kpi"><strong>${summary.waitingRepair}</strong><span>Pendientes de reparación</span></div><div class="kpi"><strong>${summary.waitingPaint}</strong><span>Reparados pendientes de pintura</span></div></div><h2>Reparación por modalidad</h2><table><thead><tr><th>Modalidad</th><th>Racks reparados</th><th>Kg reparados</th><th>HH registradas</th><th>HH/ton</th></tr></thead><tbody>${modesRows}</tbody></table><div class="foot">Las HH consideran todos los recursos asignados y sus registros de tiempo.</div></body></html>`);
+            reportWindow.document.close();
+            reportWindow.focus();
+            setTimeout(() => reportWindow.print(), 250);
         };
 
         function renderDashboard() {
@@ -4499,6 +4938,7 @@
                     unit: (st.name === 'Preparación' || st.name === 'Corte' || st.name === 'Plegado') ? 'Piezas' : 'Conj.'
                 }));
                 const stageNames = stages.map(s => s.name);
+                const rackRepairSummary = getRackRepairSummary(p, stages, state.elements.filter(element => element.projectId === p.id));
                 
                 let weightedAdvance = 0;
                 let stagesHtml = '';
@@ -4596,7 +5036,7 @@
 
                 return `<div class="project-card" id="pcard-${p.id}">
                     <div class="project-header-clickable" onclick="document.getElementById('pcard-${p.id}').classList.toggle('expanded')">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                        <div class="${rackRepairSummary ? 'project-header-main-rack-repair' : ''}" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
                             <div>
                                 <h3 style="margin:0 0 6px 0; font-size:16px;">OT ${p.otCode} - ${p.projectName}</h3>
                                 <div class="project-stats" style="margin-top:4px; flex-wrap: wrap; gap: 8px 16px;">
@@ -4618,6 +5058,24 @@
                                 </div>
                                 <div class="expand-icon">▼</div>
                             </div>
+                        ${rackRepairSummary ? `
+                        <div class="rack-repair-summary" onclick="event.stopPropagation()">
+                            <div class="rack-repair-summary-head">
+                                <span>Reparación de Rack · ${rackRepairSummary.totalRacks} total</span>
+                                <button type="button" onclick="event.stopPropagation();printRackRepairReport('${p.id}')" title="Imprimir o guardar como PDF">PDF / Imprimir</button>
+                            </div>
+                            <div class="rack-repair-summary-counts">
+                                <div><strong>${rackRepairSummary.repairedRacks}</strong><small>Reparados</small></div>
+                                <div><strong>${rackRepairSummary.paintedRacks}</strong><small>Pintados / despacho</small></div>
+                                <div><strong>${rackRepairSummary.waitingPaint}</strong><small>Esperan pintura</small></div>
+                                <div><strong>${rackRepairSummary.waitingRepair}</strong><small>Esperan reparación</small></div>
+                            </div>
+                            ${rackRepairSummary.modes.map(mode => {
+                                const tons = mode.kg / 1000;
+                                const hhPerTon = tons > 0 ? (mode.hh / tons).toFixed(1) : '—';
+                                return `<div class="rack-repair-mode"><span>${mode.label}</span><strong>${mode.racks} racks</strong><span>${mode.hh.toFixed(1)} HH · ${hhPerTon} HH/ton</span></div>`;
+                            }).join('')}
+                        </div>` : ''}
                         </div>
                     </div>
                     <div class="project-body">
@@ -5924,6 +6382,7 @@
         // ════════════════════════════════════════════════════════
         let selectedPrepParts = new Set(); // IDs de partes seleccionadas
         let selectedCreatedPrepTasks = new Set(); // IDs de tareas de preparación seleccionadas
+        let prepWorkerFilter = '';
         let showOnlyPendingPrep = true; // Mostrar solo partes pendientes por defecto
         let _editingPrepTaskId = null; // ID de tarea de preparación en edición
 
@@ -5967,7 +6426,10 @@
             }
 
             // Separar tareas activas (por cerrar) de las terminadas y anuladas
-            const activePrepTasks = prepTasks.filter(t => t.status === 'Activa');
+            const allActivePrepTasks = prepTasks.filter(t => t.status === 'Activa');
+            const activePrepTasks = allActivePrepTasks.filter(t => !prepWorkerFilter || (t.workerIds || []).includes(prepWorkerFilter));
+            const assignedPrepWorkerIds = new Set(allActivePrepTasks.flatMap(task => task.workerIds || []));
+            const prepWorkers = state.workers.filter(worker => assignedPrepWorkerIds.has(worker.id));
             const finishedPrepTasks = prepTasks.filter(t => t.status === 'Terminada');
             const annulledPrepTasks = prepTasks.filter(t => t.status === 'Anulada');
 
@@ -5976,10 +6438,14 @@
                 html += `<div style="margin-bottom:20px;padding:16px;background:#fff;border:1px solid var(--line);border-radius:8px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
                     <div>
-                        <h3 style="margin:0;color:var(--primary);">🔨 Tareas Activas por Cerrar (${activePrepTasks.length})</h3>
+                        <h3 style="margin:0;color:var(--primary);">🔨 Tareas Activas por Cerrar (${prepWorkerFilter ? `${activePrepTasks.length} de ${allActivePrepTasks.length}` : activePrepTasks.length})</h3>
                         <small style="color:var(--muted);font-size:12px;">Selecciona con tick para cerrar en bloque o gestionar</small>
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;">
+                        <select id="prep-worker-filter" aria-label="Filtrar tareas por trabajador" onchange="updatePrepWorkerFilter(this.value)" style="max-width:230px;font-size:12px;padding:6px 8px;">
+                            <option value="" ${prepWorkerFilter === '' ? 'selected' : ''}>Todos los trabajadores</option>
+                            ${prepWorkers.map(worker => `<option value="${worker.id}" ${prepWorkerFilter === worker.id ? 'selected' : ''}>${worker.name}</option>`).join('')}
+                        </select>
                         <div id="prep-bulk-actions-bar" style="display:${selectedCreatedPrepTasks.size > 0 ? 'flex' : 'none'};align-items:center;gap:8px;background:#e8f4fd;padding:4px 12px;border-radius:6px;border:1px solid var(--info);flex-wrap:wrap;">
                             <span id="prep-selected-counter" style="font-size:12px;font-weight:600;color:var(--info);">${selectedCreatedPrepTasks.size} selec.</span>
                             <button class="primary" onclick="bulkClosePrepTasks()" style="padding:4px 10px;font-size:11px;border-radius:4px;cursor:pointer;" title="Cerrar tareas seleccionadas e imputar HH">✅ Cerrar Seleccionadas</button>
@@ -5993,7 +6459,7 @@
                     <table style="min-width:800px;">
                         <thead>
                             <tr>
-                                <th style="width:30px;"><input type="checkbox" id="prep-master-cb" onchange="toggleAllPrepTasks(this)"></th>
+                                <th style="width:30px;"><input type="checkbox" id="prep-master-cb" ${activePrepTasks.length > 0 && activePrepTasks.every(task => selectedCreatedPrepTasks.has(task.id)) ? 'checked' : ''} onchange="toggleAllPrepTasks(this)"></th>
                                 <th>Código</th>
                                 <th>Parte</th>
                                 <th>Perfil</th>
@@ -6007,7 +6473,7 @@
                         <tbody id="prep-active-tasks-tbody">`;
 
                 if (activePrepTasks.length === 0) {
-                    html += `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">No hay tareas activas pendientes de cierre.</td></tr>`;
+                    html += `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">${prepWorkerFilter ? 'Este trabajador no tiene tareas activas pendientes de cierre en esta OT.' : 'No hay tareas activas pendientes de cierre.'}</td></tr>`;
                 } else {
                     activePrepTasks.forEach(task => {
                         const part = state.parts.find(p => p.id === task.partId);
@@ -6218,7 +6684,15 @@
             });
 
             html += `</tbody></table></div>`;
+            const partsTableWrap = container.querySelector('.planning-parts-table')?.closest('.table-wrap');
+            const previousScrollTop = partsTableWrap?.scrollTop || 0;
+            const previousScrollLeft = partsTableWrap?.scrollLeft || 0;
             container.innerHTML = html;
+            const updatedPartsTableWrap = container.querySelector('.planning-parts-table')?.closest('.table-wrap');
+            if (updatedPartsTableWrap) {
+                updatedPartsTableWrap.scrollTop = previousScrollTop;
+                updatedPartsTableWrap.scrollLeft = previousScrollLeft;
+            }
         }
 
         window.togglePrepPart = (partId, event) => {
@@ -6477,10 +6951,18 @@
             if (select) {
                 // Limpiar selección al cambiar de proyecto
                 selectedPrepParts.clear();
+                selectedCreatedPrepTasks.clear();
+                prepWorkerFilter = '';
                 // Guardar el proyecto seleccionado en una variable global para persistencia
                 window.currentPrepProjectId = select.value || null;
                 renderPreparationPlanning();
             }
+        };
+
+        window.updatePrepWorkerFilter = (workerId) => {
+            prepWorkerFilter = workerId || '';
+            selectedCreatedPrepTasks.clear();
+            renderPreparationPlanning();
         };
 
         window.toggleShowOnlyPending = () => {
@@ -6507,7 +6989,7 @@
         window.toggleAllPrepTasks = (masterCheckbox) => {
             const prepProjectId = window.currentPrepProjectId || currentProjectId;
             if (!prepProjectId) return;
-            const activePrepTasks = state.tasks.filter(t => t.projectId === prepProjectId && t.process === 'Preparación' && t.status === 'Activa');
+            const activePrepTasks = state.tasks.filter(t => t.projectId === prepProjectId && t.process === 'Preparación' && t.status === 'Activa' && (!prepWorkerFilter || (t.workerIds || []).includes(prepWorkerFilter)));
             if (masterCheckbox.checked) {
                 activePrepTasks.forEach(t => selectedCreatedPrepTasks.add(t.id));
             } else {
@@ -6533,7 +7015,7 @@
             }
             if (masterCb) {
                 const prepProjectId = window.currentPrepProjectId || currentProjectId;
-                const activePrepTasks = state.tasks.filter(t => t.projectId === prepProjectId && t.process === 'Preparación' && t.status === 'Activa');
+                const activePrepTasks = state.tasks.filter(t => t.projectId === prepProjectId && t.process === 'Preparación' && t.status === 'Activa' && (!prepWorkerFilter || (t.workerIds || []).includes(prepWorkerFilter)));
                 masterCb.checked = activePrepTasks.length > 0 && activePrepTasks.every(t => selectedCreatedPrepTasks.has(t.id));
             }
         }
@@ -6622,6 +7104,11 @@
                         <button type="button" onclick="applyPrepBulkFillHH()" style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid var(--primary);color:var(--primary);font-weight:600;border-radius:4px;cursor:pointer;">Rellenar todas</button>
                     </div>
 
+                    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:#e7f4ef;border:1px solid #b8dfd3;border-radius:6px;">
+                        <span style="font-size:12px;color:var(--primary-strong);">Total HH a cargar:</span>
+                        <strong id="prep-bulk-close-total-hh" aria-live="polite" style="font-size:18px;color:var(--primary-strong);">0,0 HH</strong>
+                    </div>
+
                     <div class="table-wrap" style="flex:1;overflow-y:auto;margin:0 0 16px 0;max-height:50vh;border:1px solid var(--line);border-radius:6px;">
                         <table style="min-width:750px;margin:0;">
                             <thead style="position:sticky;top:0;background:#fff;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
@@ -6645,6 +7132,8 @@
             </div>`;
 
             document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.querySelectorAll('.prep-bulk-close-hh').forEach(input => input.addEventListener('input', updatePrepBulkTotalHH));
+            updatePrepBulkTotalHH();
         };
 
         window.closeBulkClosePrepModal = () => {
@@ -6660,6 +7149,14 @@
             document.querySelectorAll('.prep-bulk-close-hh').forEach(input => {
                 input.value = fillVal;
             });
+            updatePrepBulkTotalHH();
+        };
+
+        window.updatePrepBulkTotalHH = () => {
+            const total = Array.from(document.querySelectorAll('.prep-bulk-close-hh'))
+                .reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
+            const totalElement = document.getElementById('prep-bulk-close-total-hh');
+            if (totalElement) totalElement.textContent = `${total.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HH`;
         };
 
         window.confirmBulkClosePrep = async () => {
