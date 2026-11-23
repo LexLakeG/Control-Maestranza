@@ -2459,6 +2459,25 @@
         // ════════════════════════════════════════════════════════
         // 🗄️  CARGA DE DATOS DESDE SUPABASE
         // ════════════════════════════════════════════════════════
+        async function loadAllTimeEntries() {
+            const pageSize = 500;
+            const allEntries = [];
+
+            for (let from = 0; ; from += pageSize) {
+                const { data, error } = await db.from('time_entries')
+                    .select('*')
+                    .order('created_at', { ascending: true })
+                    .order('id', { ascending: true })
+                    .range(from, from + pageSize - 1);
+
+                if (error) return { data: null, error };
+                if (!data) return { data: null, error: new Error('Supabase no devolvió los registros de HH.') };
+
+                allEntries.push(...data);
+                if (data.length < pageSize) return { data: allEntries, error: null };
+            }
+        }
+
         async function loadState() {
             const [
                 { data: projects, error: e1 },
@@ -2478,7 +2497,7 @@
                 db.from('elements').select('*').order('created_at'),
                 db.from('parts').select('*').order('created_at'),
                 db.from('tasks').select('*, task_workers(worker_id)').order('created_at'),
-                db.from('time_entries').select('*').order('created_at'),
+                loadAllTimeEntries(),
                 db.from('inspections').select('*').order('created_at'),
                 db.from('etapas_maestras').select('*').order('orden'),
                 db.from('proyecto_etapas').select('*'),
