@@ -302,14 +302,27 @@
             inset: 0;
             z-index: 1200;
             display: none;
-            flex-direction: column;
-            gap: 12px;
-            padding: 16px;
-            background: var(--bg);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(23, 32, 42, 0.48);
         }
 
         .marks-fullscreen-overlay.active {
             display: flex;
+        }
+
+        .marks-floating-window {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: min(1150px, calc(100vw - 48px));
+            max-height: min(860px, calc(100vh - 48px));
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--bg);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.24);
         }
 
         .marks-fullscreen-header,
@@ -351,6 +364,12 @@
 
         @media (max-width: 600px) {
             .marks-fullscreen-overlay {
+                padding: 8px;
+            }
+
+            .marks-floating-window {
+                width: calc(100vw - 16px);
+                max-height: calc(100vh - 16px);
                 padding: 8px;
                 gap: 8px;
             }
@@ -1564,6 +1583,17 @@
 
         <!-- PROYECTOS -->
         <section id="projects" class="view">
+            <div class="panel" style="margin-bottom: 16px;">
+                <div class="panel-head">
+                    <h2>Familias de proyectos</h2>
+                    <span style="font-size:13px;color:var(--muted);">Clasifica las OTs y analiza su eficiencia por cliente</span>
+                </div>
+                <form id="project-family-form" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <input type="text" name="familyName" placeholder="Nombre de la nueva familia" maxlength="100" required style="flex:1;min-width:0;">
+                    <button type="submit" class="primary">+ Agregar familia</button>
+                </form>
+                <div id="project-families-list"></div>
+            </div>
             <div class="content-grid">
                 <div class="panel">
                     <div class="panel-head">
@@ -1574,7 +1604,15 @@
                         <label>Código OT <input type="text" name="otCode" placeholder="Ej: 8841" required></label>
                         <label>Nombre Proyecto <input type="text" name="projectName" placeholder="Ej: Estructura Nave B"
                                 required></label>
-                        <label>Cliente <input type="text" name="clientName" placeholder="Nombre del cliente"></label>
+                        <label>Familia <select name="familyId" id="new-project-family" required></select></label>
+                        <label>Cliente
+                            <select id="new-project-client-select" aria-label="Seleccionar cliente">
+                                <option value="">Sin cliente</option>
+                                <option value="__new__">＋ Agregar cliente nuevo</option>
+                            </select>
+                            <input type="text" id="new-project-client-new" placeholder="Escribe el nombre del nuevo cliente" maxlength="150" style="display:none;margin-top:6px;">
+                            <small style="display:block;color:var(--muted);margin-top:4px;">Elige un cliente existente o agrega uno nuevo.</small>
+                        </label>
                         <label>HH/Ton Presupuestadas <input type="number" name="budgetedHhTon" min="0" step="0.1" required></label>
                         <label>Fecha Inicio <input type="date" name="startDate"></label>
                         <label>Fecha Compromiso <input type="date" name="deadline"></label>
@@ -1613,28 +1651,32 @@
                         <div class="panel-head">
                             <h2>Elementos Cargados</h2><span id="elements-count">0 marcas</span>
                         </div>
+                        <p id="element-client-hint" style="display:none;color:var(--muted);font-size:13px;">Corte y Plegado: asigna el cliente a cada elemento desde ✏️ Editar para separar los kilos y las HH en Reportes.</p>
                         <button type="button" class="primary wide" onclick="openElementsFullscreen()">Ver marcas cargadas a pantalla completa</button>
                     </div>
                 </div>
             </div>
             <div id="elements-fullscreen-modal" class="marks-fullscreen-overlay" aria-hidden="true" onclick="if(event.target===this)closeElementsFullscreen()">
-                <div class="marks-fullscreen-header">
-                    <div>
-                        <small>Elementos cargados</small>
-                        <h2 id="elements-fullscreen-project">OT</h2>
+                <div class="marks-floating-window" role="dialog" aria-modal="true" aria-labelledby="elements-fullscreen-project">
+                    <div class="marks-fullscreen-header">
+                        <div>
+                            <small>Elementos cargados</small>
+                            <h2 id="elements-fullscreen-project">OT</h2>
+                        </div>
+                        <button type="button" onclick="closeElementsFullscreen()" aria-label="Cerrar listado de marcas" title="Cerrar">✕</button>
                     </div>
-                    <button type="button" onclick="closeElementsFullscreen()" aria-label="Cerrar listado de marcas" title="Cerrar">✕</button>
-                </div>
-                <div class="marks-fullscreen-toolbar">
-                    <input id="elements-mark-search" type="search" placeholder="Buscar marca..." oninput="filterElementsFullscreen()">
-                    <span id="elements-fullscreen-visible-count"></span>
-                </div>
-                <div class="table-wrap marks-fullscreen-table-wrap">
-                    <table>
-                        <thead><tr><th>Marca</th><th>Cant.</th><th>Kg Unit.</th><th>Kg Total</th><th>Estado</th><th>Acción</th></tr></thead>
-                        <tbody id="elements-fullscreen-table"></tbody>
-                        <tfoot id="elements-fullscreen-foot"></tfoot>
-                    </table>
+                    <div class="marks-fullscreen-toolbar">
+                        <input id="elements-mark-search" type="search" placeholder="Buscar marca..." oninput="filterElementsFullscreen()">
+                        <span id="elements-fullscreen-visible-count"></span>
+                        <button type="button" onclick="printElementsFullscreen()" title="Imprimir o guardar como PDF">🖨️ Imprimir / PDF</button>
+                    </div>
+                    <div class="table-wrap marks-fullscreen-table-wrap">
+                        <table>
+                            <thead><tr><th>Marca</th><th>Cliente</th><th>Cant.</th><th>Kg Unit.</th><th>Kg Total</th><th>Estado</th><th>Acción</th></tr></thead>
+                            <tbody id="elements-fullscreen-table"></tbody>
+                            <tfoot id="elements-fullscreen-foot"></tfoot>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -2031,6 +2073,26 @@
 
         <!-- REPORTES -->
         <section id="reports" class="view">
+            <div class="panel" style="margin-bottom:16px;">
+                <div class="panel-head">
+                    <h2>Eficiencia por familia, cliente y OT</h2>
+                    <span style="font-size:13px;color:var(--muted);">HH registradas por tonelada de peso cargado</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Familia</th><th>Cliente</th><th>OTs</th><th>HH</th><th>Toneladas cargadas</th><th>HH/Ton</th></tr></thead>
+                        <tbody id="client-efficiency-summary"></tbody>
+                    </table>
+                </div>
+                <h3 style="margin-top:20px;">Detalle por trabajo</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Familia</th><th>Cliente</th><th>OT</th><th>Trabajo / Elemento</th><th>HH</th><th>Toneladas cargadas</th><th>HH/Ton</th></tr></thead>
+                        <tbody id="client-efficiency-projects"></tbody>
+                    </table>
+                </div>
+                <small style="display:block;margin-top:8px;color:var(--muted);">En Corte y Plegado, los kilos y las HH se separan según el cliente asignado a cada elemento. En las demás familias, el análisis se calcula por OT. La eficiencia del resumen usa HH totales / toneladas totales.</small>
+            </div>
             <div class="content-grid">
                 <div class="panel">
                     <div class="panel-head">
@@ -2168,8 +2230,16 @@
                 <label>Nombre Proyecto
                     <input type="text" id="edit-proj-name" required>
                 </label>
+                <label>Familia
+                    <select id="edit-proj-family"></select>
+                </label>
                 <label>Cliente
-                    <input type="text" id="edit-proj-client">
+                    <select id="edit-proj-client-select" aria-label="Seleccionar cliente existente o agregar uno nuevo">
+                        <option value="">Sin cliente</option>
+                        <option value="__new__">＋ Agregar cliente nuevo</option>
+                    </select>
+                    <input type="text" id="edit-proj-client-new" placeholder="Escribe el nombre del nuevo cliente" maxlength="150" style="display:none;margin-top:6px;">
+                    <small style="display:block;color:var(--muted);margin-top:4px;">Selecciona otro cliente para cambiarlo o agrega uno nuevo.</small>
                 </label>
                 <label>HH/Ton Presupuestadas
                     <input type="number" id="edit-proj-hh-ton" step="0.1" min="0" required>
@@ -2216,6 +2286,11 @@
                         <option value="En proceso">En proceso</option>
                         <option value="Terminado">Terminado</option>
                     </select>
+                </label>
+                <label id="edit-el-client-field" style="display:none;">Cliente del elemento
+                    <select id="edit-el-client-select"></select>
+                    <input type="text" id="edit-el-client-new" placeholder="Nombre del nuevo cliente" maxlength="150" style="display:none;margin-top:6px;">
+                    <small style="display:block;color:var(--muted);margin-top:4px;">Asigna cada conjunto al cliente correspondiente para separar las HH y los kilos.</small>
                 </label>
                 <div style="grid-column:1/-1;margin-top:10px;">
                     <h3 style="margin:0 0 8px 0;font-size:14px;color:var(--primary);">Cantidades Totales de Partes Asociadas</h3>
@@ -2368,9 +2443,10 @@
         // 🔄  NORMALIZADORES  (DB snake_case → App camelCase)
         // ════════════════════════════════════════════════════════
         const norm = {
-            project: p => ({ id: p.id, otCode: p.ot_code, projectName: p.project_name, clientName: p.client_name || '', estimatedHh: parseFloat(p.estimated_hh) || 0, budgetedHhTon: parseFloat(p.budgeted_hh_ton) || null, startDate: p.start_date || '', deadline: p.deadline || '', csvVersion: p.csv_version || 0, createdAt: p.created_at || new Date().toISOString() }),
+            project: p => ({ id: p.id, otCode: p.ot_code, projectName: p.project_name, familyId: p.family_id || '', clientName: p.client_name || '', estimatedHh: parseFloat(p.estimated_hh) || 0, budgetedHhTon: parseFloat(p.budgeted_hh_ton) || null, startDate: p.start_date || '', deadline: p.deadline || '', csvVersion: p.csv_version || 0, createdAt: p.created_at || new Date().toISOString() }),
+            projectFamily: f => ({ id: f.id, name: f.name }),
             worker: w => ({ id: w.id, rrhhCode: w.rrhh_code, name: w.name, role: w.role, active: w.active }),
-            element: e => ({ id: e.id, projectId: e.project_id, mark: e.mark, quantity: e.quantity, unit_weight_kg: parseFloat(e.unit_weight_kg) || 0, total_weight_kg: parseFloat(e.total_weight_kg) || 0, status: e.status || 'Pendiente' }),
+            element: e => ({ id: e.id, projectId: e.project_id, mark: e.mark, quantity: e.quantity, clientName: e.client_name || '', unit_weight_kg: parseFloat(e.unit_weight_kg) || 0, total_weight_kg: parseFloat(e.total_weight_kg) || 0, status: e.status || 'Pendiente' }),
             part: p => ({ id: p.id, projectId: p.project_id, elementId: p.element_id, partCode: p.part_code, profile: p.profile || '', qtyPerElement: p.qty_per_element, totalQty: p.total_qty, length_mm: p.length_mm, area_m2: p.area_m2, unit_weight_kg: parseFloat(p.unit_weight_kg) || 0, total_weight_kg: parseFloat(p.total_weight_kg) || 0 }),
             task: t => ({ id: t.id, projectId: t.project_id, code: t.code, process: t.process, elementId: t.element_id, partId: t.part_id, quantity: t.quantity, status: t.status, instructions: t.instructions || '', csvVersion: t.csv_version || 0, csvWarning: t.csv_warning || false, isRework: t.is_rework || false, linkedInspectionId: t.linked_inspection_id, createdAt: t.created_at, workerIds: (t.task_workers || []).map(tw => tw.worker_id) }),
             timeEntry: te => ({ id: te.id, taskId: te.task_id, workerId: te.worker_id, projectId: te.project_id, work_date: te.work_date, hh: parseFloat(te.hh), is_rework: te.is_rework || false, validated: te.validated }),
@@ -2395,6 +2471,7 @@
                 { data: etapasMaestras, error: e8 },
                 { data: proyectoEtapas, error: e9 },
                 { data: hhIndirectas, error: e10 },
+                { data: projectFamilies, error: e11 },
             ] = await Promise.all([
                 db.from('projects').select('*').order('created_at'),
                 db.from('workers').select('*').order('created_at'),
@@ -2406,8 +2483,9 @@
                 db.from('etapas_maestras').select('*').order('orden'),
                 db.from('proyecto_etapas').select('*'),
                 db.from('hh_indirectas').select('*').order('anio,mes'),
+                db.from('project_families').select('*').order('name'),
             ]);
-            const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10].filter(Boolean);
+            const errors = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11].filter(Boolean);
             if (errors.length) {
                 console.error('Supabase load errors:', errors);
                 throw new Error('No se pudo cargar toda la información operativa. Revisa la conexión e inténtalo nuevamente.');
@@ -2423,6 +2501,7 @@
                 etapasMaestras: (etapasMaestras || []).map(norm.etapaMaestra),
                 proyectoEtapas: (proyectoEtapas || []).map(norm.proyectoEtapa),
                 hhIndirectas: (hhIndirectas || []).map(norm.hhIndirecta),
+                projectFamilies: (projectFamilies || []).map(norm.projectFamily),
             };
         }
 
@@ -2437,6 +2516,7 @@
             const payload = {
                 ot_code: data.otCode,
                 project_name: data.projectName,
+                family_id: data.familyId || null,
                 client_name: data.clientName,
                 budgeted_hh_ton: data.budgetedHhTon,
                 start_date: data.startDate || null,
@@ -2471,7 +2551,7 @@
         }
 
         async function dbInsertProject(p, selectedStages) {
-            const { data, error } = await db.from('projects').insert({ id: p.id, ot_code: p.otCode, project_name: p.projectName, client_name: p.clientName, estimated_hh: p.estimatedHh, budgeted_hh_ton: p.budgetedHhTon, start_date: p.startDate || null, deadline: p.deadline || null, csv_version: 0 }).select().single();
+            const { data, error } = await db.from('projects').insert({ id: p.id, ot_code: p.otCode, project_name: p.projectName, family_id: p.familyId || null, client_name: p.clientName, estimated_hh: p.estimatedHh, budgeted_hh_ton: p.budgetedHhTon, start_date: p.startDate || null, deadline: p.deadline || null, csv_version: 0 }).select().single();
             if (error) { alert('Error al crear proyecto: ' + error.message); throw error; }
             
             if (selectedStages && selectedStages.length > 0) {
@@ -2499,7 +2579,8 @@
 
         // --- Elementos ---
         async function dbUpsertElement(e) {
-            const { data, error } = await db.from('elements').upsert({ id: e.id, project_id: e.projectId, mark: e.mark, quantity: e.quantity, unit_weight_kg: e.unit_weight_kg, total_weight_kg: e.total_weight_kg, status: e.status || 'Pendiente' }, { onConflict: 'id' }).select().single();
+            const project = state.projects.find(item => item.id === e.projectId);
+            const { data, error } = await db.from('elements').upsert({ id: e.id, project_id: e.projectId, mark: e.mark, quantity: e.quantity, client_name: e.clientName || (isCutAndFoldProject(project) ? project.clientName : '') || '', unit_weight_kg: e.unit_weight_kg, total_weight_kg: e.total_weight_kg, status: e.status || 'Pendiente' }, { onConflict: 'id' }).select().single();
             if (error) { console.error('Error upsert element:', error); throw error; }
             return norm.element(data);
         }
@@ -2555,7 +2636,10 @@
             if (!elements.length) return [];
             // Eliminar duplicados antes de upsert
             const uniqueElements = removeDuplicates(elements, ['projectId', 'mark']);
-            const rows = uniqueElements.map(e => ({ id: e.id, project_id: e.projectId, mark: e.mark, quantity: e.quantity, unit_weight_kg: e.unit_weight_kg, total_weight_kg: e.total_weight_kg, status: e.status || 'Pendiente' }));
+            const rows = uniqueElements.map(e => {
+                const project = state.projects.find(item => item.id === e.projectId);
+                return { id: e.id, project_id: e.projectId, mark: e.mark, quantity: e.quantity, client_name: e.clientName || (isCutAndFoldProject(project) ? project.clientName : '') || '', unit_weight_kg: e.unit_weight_kg, total_weight_kg: e.total_weight_kg, status: e.status || 'Pendiente' };
+            });
             const CHUNK = 500; const saved = [];
             for (let i = 0; i < rows.length; i += CHUNK) {
                 const { data, error } = await db.from('elements').upsert(rows.slice(i, i + CHUNK), { onConflict: 'project_id,mark', ignoreDuplicates: false }).select();
@@ -2743,7 +2827,7 @@
         // ════════════════════════════════════════════════════════
         // 🗃️  ESTADO GLOBAL
         // ════════════════════════════════════════════════════════
-        let state = { projects: [], workers: [], elements: [], parts: [], tasks: [], timeEntries: [], inspections: [] };
+        let state = { projects: [], projectFamilies: [], workers: [], elements: [], parts: [], tasks: [], timeEntries: [], inspections: [] };
         let currentProjectId = null;
         let csvFileProjectId = null;
         let isComponentImporting = false;
@@ -2751,6 +2835,81 @@
         let currentUser = null;      // objeto Supabase Auth user
         let currentRole = null;      // 'Admin' | 'Supervisor' | 'Operaciones' | 'Inspector de calidad' | 'Gerencia'
         let currentUserName = null;  // nombre para mostrar
+
+        const CLIENT_REQUIRED_FAMILIES = new Set([
+            'corte y plegado',
+            'reparacion de rack',
+            'fabricacion de rack',
+            'pintura electrostatica'
+        ]);
+
+        function normalizeFamilyName(name) {
+            return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
+        }
+
+        function getProjectFamilyName(project) {
+            return state.projectFamilies.find(family => family.id === project.familyId)?.name || 'Sin familia';
+        }
+
+        function isCutAndFoldProject(project) {
+            return !!project && normalizeFamilyName(getProjectFamilyName(project)) === 'corte y plegado';
+        }
+
+        function getElementClientName(element) {
+            const project = state.projects.find(item => item.id === element.projectId);
+            return (element.clientName || project?.clientName || '').trim();
+        }
+
+        function getKnownClientNames() {
+            const names = [...state.projects.map(project => project.clientName), ...state.elements.map(element => element.clientName)];
+            return [...new Map(names.map(name => (name || '').trim()).filter(Boolean).map(name => [normalizeFamilyName(name), name])).values()]
+                .sort((a, b) => a.localeCompare(b, 'es'));
+        }
+
+        function populateClientSelect(select, selectedName) {
+            if (!select) return;
+            const clients = getKnownClientNames();
+            select.innerHTML = '<option value="">Selecciona un cliente</option><option value="__new__">＋ Agregar cliente nuevo</option>' +
+                clients.map(client => `<option value="${escapeReportText(client)}">${escapeReportText(client)}</option>`).join('');
+            const matchingClient = clients.find(client => normalizeFamilyName(client) === normalizeFamilyName(selectedName));
+            select.value = matchingClient || (selectedName ? '__new__' : '');
+        }
+
+        function updateElementClientInput() {
+            const select = document.getElementById('edit-el-client-select');
+            const input = document.getElementById('edit-el-client-new');
+            if (!select || !input) return;
+            const isNew = select.value === '__new__';
+            select.required = true;
+            input.style.display = isNew ? 'block' : 'none';
+            input.disabled = !isNew;
+            input.required = isNew;
+        }
+
+        function isClientRequiredForFamily(familyId) {
+            const family = state.projectFamilies.find(item => item.id === familyId);
+            return !!family && CLIENT_REQUIRED_FAMILIES.has(normalizeFamilyName(family.name));
+        }
+
+        function updateClientRequirement(familySelectId, clientSelectId, newClientInputId) {
+            const familySelect = document.getElementById(familySelectId);
+            const clientSelect = document.getElementById(clientSelectId);
+            const newClientInput = document.getElementById(newClientInputId);
+            if (!familySelect || !clientSelect || !newClientInput) return;
+            const isRequired = isClientRequiredForFamily(familySelect.value);
+            const isAddingClient = clientSelect.value === '__new__';
+            clientSelect.required = isRequired;
+            newClientInput.style.display = isAddingClient ? 'block' : 'none';
+            newClientInput.required = isRequired && isAddingClient;
+            newClientInput.disabled = !isAddingClient;
+        }
+
+        function getSelectedProjectClient(clientSelectId, newClientInputId) {
+            const clientSelect = document.getElementById(clientSelectId);
+            if (!clientSelect || !clientSelect.value) return '';
+            if (clientSelect.value === '__new__') return document.getElementById(newClientInputId).value.trim();
+            return clientSelect.value;
+        }
 
         // ════════════════════════════════════════════════════════
         // 🔐  ROLES Y PERMISOS  (basados en currentRole desde DB)
@@ -2790,6 +2949,8 @@
             // Panel de usuarios solo para Admin
             const usersPanel = document.getElementById('users-panel');
             if (usersPanel) usersPanel.style.display = currentRole === 'Admin' ? 'block' : 'none';
+            const familyForm = document.getElementById('project-family-form');
+            if (familyForm) familyForm.style.display = currentRole === 'Admin' ? 'flex' : 'none';
         }
 
         // ════════════════════════════════════════════════════════
@@ -2963,7 +3124,8 @@
             const updates = {
                 otCode: document.getElementById('edit-proj-ot').value.trim(),
                 projectName: document.getElementById('edit-proj-name').value.trim(),
-                clientName: document.getElementById('edit-proj-client').value.trim(),
+                familyId: document.getElementById('edit-proj-family').value,
+                clientName: getSelectedProjectClient('edit-proj-client-select', 'edit-proj-client-new'),
                 budgetedHhTon: parseFloat(document.getElementById('edit-proj-hh-ton').value) || 0,
                 startDate: document.getElementById('edit-proj-start').value || null,
                 deadline: document.getElementById('edit-proj-deadline').value || null
@@ -3005,12 +3167,16 @@
                 return;
             }
 
-            const newProject = { id: crypto.randomUUID(), otCode, projectName: form.get("projectName").trim(), clientName: form.get("clientName").trim(), budgetedHhTon: parseFloat(form.get("budgetedHhTon")) || 0, estimatedHh: 0, startDate: form.get("startDate"), deadline: form.get("deadline"), csvVersion: 0 };
+            const newProject = { id: crypto.randomUUID(), otCode, projectName: form.get("projectName").trim(), familyId: form.get("familyId"), clientName: getSelectedProjectClient('new-project-client-select', 'new-project-client-new'), budgetedHhTon: parseFloat(form.get("budgetedHhTon")) || 0, estimatedHh: 0, startDate: form.get("startDate"), deadline: form.get("deadline"), csvVersion: 0 };
             
             try {
                 const saved = await dbInsertProject(newProject, selectedStages);
                 state.projects.push(saved);
-                formEl.reset(); currentProjectId = saved.id; resetCsvImportState(); renderAll();
+                formEl.reset();
+                document.getElementById('new-project-client-new').value = '';
+                currentProjectId = saved.id;
+                resetCsvImportState();
+                renderAll();
             } catch (err) { /* manejado en dbInsertProject */ }
         });
 
@@ -3138,7 +3304,22 @@
             document.getElementById('edit-proj-id').value = p.id;
             document.getElementById('edit-proj-ot').value = p.otCode;
             document.getElementById('edit-proj-name').value = p.projectName;
-            document.getElementById('edit-proj-client').value = p.clientName || '';
+            renderProjectFamilyControls();
+            document.getElementById('edit-proj-family').value = p.familyId || '';
+            const editClientSelect = document.getElementById('edit-proj-client-select');
+            const editClientNewInput = document.getElementById('edit-proj-client-new');
+            const matchingClient = [...editClientSelect.options].find(option => normalizeFamilyName(option.value) === normalizeFamilyName(p.clientName) && option.value !== '__new__');
+            if (p.clientName && matchingClient) {
+                editClientSelect.value = matchingClient.value;
+                editClientNewInput.value = '';
+            } else if (p.clientName) {
+                editClientSelect.value = '__new__';
+                editClientNewInput.value = p.clientName;
+            } else {
+                editClientSelect.value = '';
+                editClientNewInput.value = '';
+            }
+            updateClientRequirement('edit-proj-family', 'edit-proj-client-select', 'edit-proj-client-new');
             document.getElementById('edit-proj-hh-ton').value = p.budgetedHhTon || 0;
             document.getElementById('edit-proj-start').value = p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : '';
             document.getElementById('edit-proj-deadline').value = p.deadline ? new Date(p.deadline).toISOString().split('T')[0] : '';
@@ -3181,6 +3362,23 @@
             document.getElementById('edit-el-uwkg').value = el.unit_weight_kg.toFixed(2);
             document.getElementById('edit-el-twkg').value = el.total_weight_kg.toFixed(2);
             document.getElementById('edit-el-status').value = el.status;
+            const project = state.projects.find(item => item.id === el.projectId);
+            const clientField = document.getElementById('edit-el-client-field');
+            const clientSelect = document.getElementById('edit-el-client-select');
+            const clientNewInput = document.getElementById('edit-el-client-new');
+            const editClientForElement = isCutAndFoldProject(project);
+            clientField.style.display = editClientForElement ? 'block' : 'none';
+            clientSelect.required = editClientForElement;
+            if (editClientForElement) {
+                const currentClient = getElementClientName(el) || project.clientName || '';
+                populateClientSelect(clientSelect, currentClient);
+                clientNewInput.value = clientSelect.value === '__new__' ? currentClient : '';
+                updateElementClientInput();
+            } else {
+                clientSelect.value = '';
+                clientNewInput.value = '';
+                clientNewInput.required = false;
+            }
             
             // Cargar partes
             const parts = state.parts.filter(p => p.elementId === elementId);
@@ -3208,6 +3406,13 @@
             el.mark = document.getElementById('edit-el-mark').value.trim();
             el.quantity = parseInt(document.getElementById('edit-el-qty').value) || el.quantity;
             el.status = document.getElementById('edit-el-status').value;
+            const project = state.projects.find(item => item.id === el.projectId);
+            if (isCutAndFoldProject(project)) {
+                const clientSelect = document.getElementById('edit-el-client-select');
+                el.clientName = clientSelect.value === '__new__'
+                    ? document.getElementById('edit-el-client-new').value.trim()
+                    : clientSelect.value;
+            }
             
             try {
                 // Recalcular y guardar partes
@@ -4157,7 +4362,9 @@
                         await dbUpsertElement(el);
                     }
                 }
-                closeModal(); renderAll();
+                closeModal();
+                // MEJORA: Actualización en tiempo real en lugar de recargar toda la página
+                refreshTaskViewsRealtime();
             } catch (err) { alert('Error al cerrar la tarea: ' + err.message); }
         };
         window.annulTask = async (taskId) => {
@@ -4626,7 +4833,150 @@
         // ════════════════════════════════════════════════════════
         // 🎨  RENDERIZADO (lee del estado local en caché)
         // ════════════════════════════════════════════════════════
-        function renderAll() { renderStageCheckboxes(); renderDashboard(); renderProjects(); renderTasks(); renderHours(); renderQualityForms(); renderReports(); renderSettings(); renderHHIndirectas(); renderProrrateo(); applyRoleUI(); }
+        function renderProjectFamilyControls() {
+            const createSelect = document.getElementById('new-project-family');
+            const editSelect = document.getElementById('edit-proj-family');
+            if (createSelect) {
+                const selectedId = createSelect.value;
+                createSelect.innerHTML = '<option value="">Selecciona una familia</option>' +
+                    state.projectFamilies.map(family => `<option value="${escapeReportText(family.id)}">${escapeReportText(family.name)}</option>`).join('');
+                if (state.projectFamilies.some(family => family.id === selectedId)) createSelect.value = selectedId;
+            }
+            if (editSelect) {
+                const selectedId = editSelect.value;
+                editSelect.innerHTML = '<option value="">Sin familia</option>' +
+                    state.projectFamilies.map(family => `<option value="${escapeReportText(family.id)}">${escapeReportText(family.name)}</option>`).join('');
+                if (state.projectFamilies.some(family => family.id === selectedId)) editSelect.value = selectedId;
+            }
+
+            const knownClients = [...new Map(state.projects
+                .map(project => (project.clientName || '').trim())
+                .filter(Boolean)
+                .map(client => [normalizeFamilyName(client), client])).values()]
+                .sort((a, b) => a.localeCompare(b, 'es'));
+            const clientSelects = [
+                { selectId: 'new-project-client-select', familyId: 'new-project-family', inputId: 'new-project-client-new' },
+                { selectId: 'edit-proj-client-select', familyId: 'edit-proj-family', inputId: 'edit-proj-client-new' }
+            ];
+            clientSelects.forEach(({ selectId, familyId, inputId }) => {
+                const clientSelect = document.getElementById(selectId);
+                if (!clientSelect) return;
+                const selectedClient = clientSelect.value;
+                clientSelect.innerHTML = '<option value="">Sin cliente</option><option value="__new__">＋ Agregar cliente nuevo</option>' +
+                    knownClients.map(client => `<option value="${escapeReportText(client)}">${escapeReportText(client)}</option>`).join('');
+                if ([...clientSelect.options].some(option => option.value === selectedClient)) clientSelect.value = selectedClient;
+                updateClientRequirement(familyId, selectId, inputId);
+            });
+        }
+
+        function renderProjectFamilies() {
+            const container = document.getElementById('project-families-list');
+            if (!container) return;
+            if (!state.projectFamilies.length) {
+                container.innerHTML = '<div style="color:var(--muted);font-size:13px;">No hay familias registradas.</div>';
+                return;
+            }
+            container.innerHTML = state.projectFamilies.map(family => {
+                const projectCount = state.projects.filter(project => project.familyId === family.id).length;
+                const deleteButton = canDelete()
+                    ? `<button type="button" onclick="removeProjectFamily('${escapeReportText(family.id)}')" ${projectCount ? 'disabled title="Reasigna sus proyectos antes de eliminar"' : 'title="Eliminar familia"'} style="padding:3px 8px;font-size:12px;color:var(--danger);">Eliminar</button>`
+                    : '';
+                return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);">
+                    <span><strong>${escapeReportText(family.name)}</strong> <small style="color:var(--muted);">(${projectCount} ${projectCount === 1 ? 'OT' : 'OTs'})</small></span>${deleteButton}
+                </div>`;
+            }).join('');
+        }
+
+        const projectFamilyForm = document.getElementById('project-family-form');
+        if (projectFamilyForm) {
+            projectFamilyForm.addEventListener('submit', async event => {
+                event.preventDefault();
+                if (!canDelete()) { alert('⛔ Solo el rol Admin puede administrar familias.'); return; }
+                const name = new FormData(projectFamilyForm).get('familyName').trim();
+                if (!name) return;
+                if (state.projectFamilies.some(family => normalizeFamilyName(family.name) === normalizeFamilyName(name))) {
+                    alert('Ya existe una familia con ese nombre.');
+                    return;
+                }
+                try {
+                    const { data, error } = await db.from('project_families').insert({ name }).select().single();
+                    if (error) throw error;
+                    state.projectFamilies.push(norm.projectFamily(data));
+                    projectFamilyForm.reset();
+                    renderAll();
+                } catch (error) {
+                    alert('Error al agregar familia: ' + error.message);
+                }
+            });
+        }
+
+        window.removeProjectFamily = async familyId => {
+            if (!canDelete()) { alert('⛔ Solo el rol Admin puede administrar familias.'); return; }
+            const family = state.projectFamilies.find(item => item.id === familyId);
+            if (!family) return;
+            if (state.projects.some(project => project.familyId === familyId)) {
+                alert('No se puede eliminar esta familia porque tiene proyectos asignados. Reasigna las OTs primero.');
+                return;
+            }
+            if (!confirm(`¿Eliminar la familia "${family.name}"?`)) return;
+            try {
+                const { error } = await db.from('project_families').delete().eq('id', familyId);
+                if (error) throw error;
+                state.projectFamilies = state.projectFamilies.filter(item => item.id !== familyId);
+                renderAll();
+            } catch (error) {
+                alert('Error al eliminar familia: ' + error.message);
+            }
+        };
+
+        document.getElementById('new-project-family')?.addEventListener('change', () => updateClientRequirement('new-project-family', 'new-project-client-select', 'new-project-client-new'));
+        document.getElementById('edit-proj-family')?.addEventListener('change', () => updateClientRequirement('edit-proj-family', 'edit-proj-client-select', 'edit-proj-client-new'));
+        document.getElementById('new-project-client-select')?.addEventListener('change', () => updateClientRequirement('new-project-family', 'new-project-client-select', 'new-project-client-new'));
+        document.getElementById('edit-proj-client-select')?.addEventListener('change', () => updateClientRequirement('edit-proj-family', 'edit-proj-client-select', 'edit-proj-client-new'));
+        document.getElementById('edit-el-client-select')?.addEventListener('change', () => {
+            const input = document.getElementById('edit-el-client-new');
+            if (document.getElementById('edit-el-client-select').value === '__new__') input.value = '';
+            updateElementClientInput();
+        });
+
+        function renderAll() {
+            renderStageCheckboxes();
+            renderProjectFamilyControls();
+            renderProjectFamilies();
+            renderDashboard();
+            renderProjects();
+            renderTasks();
+            renderHours();
+            renderQualityForms();
+            renderReports();
+            renderSettings();
+            renderHHIndirectas();
+            renderProrrateo();
+            applyRoleUI();
+        }
+
+        // ════════════════════════════════════════════════════════
+        // MEJORA: Actualización en tiempo real tras cerrar tareas
+        // Actualiza solo las secciones necesarias sin recargar toda la página
+        // ════════════════════════════════════════════════════════
+        window.refreshTaskViewsRealtime = function() {
+            try {
+                // Actualizar solo las secciones de tareas y horas
+                renderTaskSections();
+                updateBulkCloseBar();
+                renderHours();
+                // Actualizar la planificación de preparación si está visible
+                const prepTab = document.getElementById('tasks-preparation');
+                if (prepTab && prepTab.classList.contains('active')) {
+                    renderPreparationPlanning();
+                }
+                // Actualizar contadores del dashboard
+                renderDashboard();
+            } catch (err) {
+                console.warn('Error en actualización en tiempo real, usando renderAll como fallback:', err);
+                renderAll();
+            }
+        };
 
         function renderStageCheckboxes() {
             const container = document.getElementById('project-stages-checkboxes');
@@ -4658,25 +5008,51 @@
                 const procStatus = typeof computeElementStatus === 'function' ? computeElementStatus(element.id) : 'Pendiente';
                 const badgeHtml = typeof elementStatusBadge === 'function' ? elementStatusBadge(procStatus) : procStatus;
                 return `<tr>
-                    <td><strong>${element.mark}</strong></td>
+                    <td><strong>${escapeReportText(element.mark)}</strong></td>
+                    <td>${escapeReportText(getElementClientName(element) || 'Sin cliente')}</td>
                     <td>${element.quantity}</td>
                     <td>${element.unit_weight_kg.toFixed(1)}</td>
                     <td>${element.total_weight_kg.toFixed(1)}</td>
                     <td>${badgeHtml}</td>
-                    <td style="display:flex;gap:4px;">
+                    <td><div style="display:flex;gap:4px;">
                         ${typeof isReadOnly === 'function' && !isReadOnly() ? `<button onclick="openEditElement('${element.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--info);color:var(--info);background:transparent;">✏️</button>` : ''}
                         ${typeof canDelete === 'function' && canDelete() ? `<button onclick="deleteElement('${element.id}')" style="padding:2px 6px;font-size:11px;border-color:var(--danger);color:var(--danger);background:transparent;">🗑</button>` : ''}
-                    </td>
+                    </div></td>
                 </tr>`;
-            }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">${query ? 'No hay marcas que coincidan con la búsqueda.' : 'No hay marcas cargadas en esta OT.'}</td></tr>`;
+            }).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">${query ? 'No hay marcas que coincidan con la búsqueda.' : 'No hay marcas cargadas en esta OT.'}</td></tr>`;
 
             if (tableFoot) {
                 const visibleQty = visibleElements.reduce((sum, element) => sum + element.quantity, 0);
                 const visibleKg = visibleElements.reduce((sum, element) => sum + element.total_weight_kg, 0);
-                tableFoot.innerHTML = visibleElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td>${visibleQty}</td><td>—</td><td>${visibleKg.toFixed(1)}</td><td></td><td></td></tr>` : '';
+                tableFoot.innerHTML = visibleElements.length ? `<tr style="font-weight:700;background:#eef2f5;border-top:2px solid var(--line);"><td>TOTAL</td><td></td><td>${visibleQty}</td><td>—</td><td>${visibleKg.toFixed(1)}</td><td></td><td></td></tr>` : '';
             }
             if (visibleCount) visibleCount.textContent = query ? `${visibleElements.length} de ${projectElements.length} marcas` : `${projectElements.length} marcas`;
         }
+
+        window.printElementsFullscreen = () => {
+            const project = state.projects.find(item => item.id === currentProjectId);
+            if (!project) return;
+            const query = (document.getElementById('elements-mark-search')?.value || '').trim().toLowerCase();
+            const elements = state.elements.filter(element => element.projectId === currentProjectId && (!query || String(element.mark || '').toLowerCase().includes(query)));
+            const totalQuantity = elements.reduce((sum, element) => sum + (Number(element.quantity) || 0), 0);
+            const totalKg = elements.reduce((sum, element) => sum + (Number(element.total_weight_kg) || 0), 0);
+            const rows = elements.map(element => {
+                const status = typeof computeElementStatus === 'function' ? computeElementStatus(element.id) : 'Pendiente';
+                const statusBadge = typeof elementStatusBadge === 'function' ? elementStatusBadge(status) : `<span>${escapeReportText(status)}</span>`;
+                return `<tr><td><strong>${escapeReportText(element.mark || '')}</strong></td><td>${escapeReportText(getElementClientName(element) || 'Sin cliente')}</td><td>${Number(element.quantity) || 0}</td><td>${(Number(element.unit_weight_kg) || 0).toFixed(1)}</td><td>${(Number(element.total_weight_kg) || 0).toFixed(1)}</td><td class="status-cell">${statusBadge}</td></tr>`;
+            }).join('');
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert('No se pudo abrir la ventana de impresión. Permite las ventanas emergentes para este sitio e inténtalo nuevamente.');
+                return;
+            }
+            printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Elementos OT ${escapeReportText(project.otCode)}</title><style>
+                @page{size:A4 portrait;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#17202a;font-size:11px;margin:0}h1{font-size:18px;margin:0 0 5px}.meta{color:#52606d;margin-bottom:14px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{border:1px solid #d8dee6;padding:7px 8px;text-align:left;overflow-wrap:anywhere}th{background:#eef2f5;text-transform:uppercase;font-size:9px}th:nth-child(1){width:18%}th:nth-child(2){width:20%}th:nth-child(3),th:nth-child(4){width:15%}th:nth-child(5){width:16%}tbody tr:nth-child(even){background:#f7f8fa}.status-cell{white-space:nowrap}.totals{font-weight:700;background:#eef2f5;break-inside:avoid}td:nth-child(3),td:nth-child(4),td:nth-child(5){text-align:right}@media print{thead{display:table-header-group}tr{break-inside:avoid}}
+            </style></head><body><h1>Elementos cargados</h1><div class="meta">OT ${escapeReportText(project.otCode)} - ${escapeReportText(project.projectName)} · ${elements.length} marcas · Fecha de impresión: ${new Date().toLocaleDateString('es-CL')}</div><table><thead><tr><th>Marca</th><th>Cliente</th><th>Cant.</th><th>Kg Unit.</th><th>Kg Total</th><th>Estado</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No hay marcas para imprimir.</td></tr>'}<tr class="totals"><td>TOTAL</td><td></td><td>${totalQuantity}</td><td>—</td><td>${totalKg.toFixed(1)}</td><td></td></tr></tbody></table></body></html>`);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => printWindow.print(), 250);
+        };
 
         let elementsFullscreenPreviousOverflow = '';
         window.filterElementsFullscreen = () => {
@@ -4715,8 +5091,17 @@
             } else {
                 // Sort from newest to oldest
                 const sortedProjects = [...state.projects].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                
-                container.innerHTML = sortedProjects.map(p => `
+                const projectGroups = state.projectFamilies.map(family => ({ id: family.id, name: family.name, projects: [] }));
+                const unassignedGroup = { id: '', name: 'Sin familia', projects: [] };
+                sortedProjects.forEach(project => {
+                    const group = projectGroups.find(item => item.id === project.familyId) || unassignedGroup;
+                    group.projects.push(project);
+                });
+
+                container.innerHTML = projectGroups.concat(unassignedGroup).filter(group => group.projects.length).map(group => `
+                    <section style="border:1px solid var(--line);border-radius:6px;margin-bottom:10px;overflow:hidden;">
+                        <h3 style="font-size:13px;margin:0;padding:8px 10px;background:#f2f5f7;">${escapeReportText(group.name)} <small style="font-weight:400;color:var(--muted);">(${group.projects.length})</small></h3>
+                        ${group.projects.map(p => `
                     <div class="project-list-item ${typeof currentProjectId !== 'undefined' && currentProjectId === p.id ? 'active' : ''}" onclick="selectProject('${p.id}')" style="padding: 10px; border-bottom: 1px solid var(--line); cursor: pointer; background: ${typeof currentProjectId !== 'undefined' && currentProjectId === p.id ? 'rgba(34,197,94,0.1)' : 'transparent'};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                             <div style="font-weight: 500;">OT ${p.otCode} - ${p.projectName}</div>
@@ -4726,7 +5111,10 @@
                             </div>
                         </div>
                         <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">👤 ${p.clientName || 'Sin cliente'}</div>
+                        <div style="font-size: 12px; color: var(--muted); margin-top: 3px;">Familia: ${escapeReportText(getProjectFamilyName(p))}</div>
                     </div>
+                        `).join('')}
+                    </section>
                 `).join('');
             }
 
@@ -4735,6 +5123,7 @@
             const noProject = document.getElementById("no-project-selected");
             const elementsSection = document.getElementById("elements-section");
             const elementsTable = document.getElementById("elements-fullscreen-table");
+            const elementClientHint = document.getElementById('element-client-hint');
 
             if (project) {
                 document.getElementById("active-project-name").textContent = `OT ${project.otCode} - ${project.projectName}`;
@@ -4744,6 +5133,7 @@
                 if(csvSection) csvSection.style.display = 'block';
                 if(noProject) noProject.style.display = 'none';
                 if(elementsSection) elementsSection.style.display = 'block';
+                if(elementClientHint) elementClientHint.style.display = isCutAndFoldProject(project) ? 'block' : 'none';
                 
                 const pElements = state.elements.filter(e => e.projectId === currentProjectId);
                 const elCount = document.getElementById("elements-count");
@@ -4780,6 +5170,7 @@
                 }
             } else {
                 document.getElementById("active-project-name").textContent = "Ninguno";
+                if(elementClientHint) elementClientHint.style.display = 'none';
                 if(csvSection) csvSection.style.display = 'none';
                 if(noProject) noProject.style.display = 'block';
                 if(elementsSection) elementsSection.style.display = 'none';
@@ -6254,7 +6645,8 @@
                 // Limpiar selección
                 selectedActiveTaskIds.clear();
                 closeBulkCloseModal();
-                renderAll();
+                // MEJORA: Actualización en tiempo real en lugar de recargar toda la página
+                refreshTaskViewsRealtime();
                 alert(`✅ Se cerraron exitosamente ${closedTaskIds.length} tareas al 100% con sus registros de HH correspondientes.`);
             } catch (err) {
                 alert('Error al cerrar tareas: ' + err.message);
@@ -6416,6 +6808,91 @@
         };
 
         function renderReports() {
+            const taskById = new Map(state.tasks.map(task => [task.id, task]));
+            const partElementById = new Map(state.parts.map(part => [part.id, part.elementId]));
+            const elementById = new Map(state.elements.map(element => [element.id, element]));
+            const hoursByProject = new Map();
+            const hoursByElement = new Map();
+            const unassignedHoursByProject = new Map();
+            state.timeEntries.forEach(entry => {
+                hoursByProject.set(entry.projectId, (hoursByProject.get(entry.projectId) || 0) + (Number(entry.hh) || 0));
+                const task = taskById.get(entry.taskId);
+                const elementId = task && (task.elementId || partElementById.get(task.partId));
+                const element = elementId && elementById.get(elementId);
+                if (element && element.projectId === entry.projectId) {
+                    hoursByElement.set(elementId, (hoursByElement.get(elementId) || 0) + (Number(entry.hh) || 0));
+                } else {
+                    unassignedHoursByProject.set(entry.projectId, (unassignedHoursByProject.get(entry.projectId) || 0) + (Number(entry.hh) || 0));
+                }
+            });
+            const weightKgByProject = new Map();
+            state.elements.forEach(element => {
+                weightKgByProject.set(element.projectId, (weightKgByProject.get(element.projectId) || 0) + (Number(element.total_weight_kg) || 0));
+            });
+            const projectEfficiency = [];
+            state.projects.forEach(project => {
+                const familyName = getProjectFamilyName(project);
+                if (isCutAndFoldProject(project)) {
+                    state.elements.filter(element => element.projectId === project.id).forEach(element => {
+                        const tons = (Number(element.total_weight_kg) || 0) / 1000;
+                        const hh = hoursByElement.get(element.id) || 0;
+                        projectEfficiency.push({
+                            project, familyName, clientName: getElementClientName(element) || 'Sin cliente',
+                            workName: `Elemento ${element.mark}`, hh, tons,
+                            hhPerTon: tons > 0 ? hh / tons : null
+                        });
+                    });
+                    const unassignedHh = unassignedHoursByProject.get(project.id) || 0;
+                    if (unassignedHh > 0) {
+                        projectEfficiency.push({
+                            project, familyName, clientName: (project.clientName || '').trim() || 'Sin cliente',
+                            workName: 'Tareas sin elemento asociado', hh: unassignedHh, tons: 0, hhPerTon: null
+                        });
+                    }
+                    return;
+                }
+                const hh = hoursByProject.get(project.id) || 0;
+                const tons = (weightKgByProject.get(project.id) || 0) / 1000;
+                projectEfficiency.push({
+                    project, familyName, clientName: (project.clientName || '').trim() || 'Sin cliente',
+                    workName: project.projectName, hh, tons,
+                    hhPerTon: tons > 0 ? hh / tons : null
+                });
+            });
+            projectEfficiency.sort((a, b) => a.familyName.localeCompare(b.familyName, 'es') ||
+                a.clientName.localeCompare(b.clientName, 'es') ||
+                a.project.otCode.localeCompare(b.project.otCode, 'es') ||
+                a.workName.localeCompare(b.workName, 'es'));
+
+            const efficiencyGroups = new Map();
+            projectEfficiency.forEach(item => {
+                const key = `${normalizeFamilyName(item.familyName)}\u0000${normalizeFamilyName(item.clientName)}`;
+                const group = efficiencyGroups.get(key) || { familyName: item.familyName, clientName: item.clientName, projectIds: new Set(), hh: 0, tons: 0 };
+                group.projectIds.add(item.project.id);
+                group.hh += item.hh;
+                group.tons += item.tons;
+                efficiencyGroups.set(key, group);
+            });
+            const formatNumber = (value, digits = 1) => Number(value).toLocaleString('es-CL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+            const summaryBody = document.getElementById('client-efficiency-summary');
+            const projectBody = document.getElementById('client-efficiency-projects');
+            if (summaryBody) {
+                const groups = [...efficiencyGroups.values()].sort((a, b) => a.familyName.localeCompare(b.familyName, 'es') || a.clientName.localeCompare(b.clientName, 'es'));
+                summaryBody.innerHTML = groups.length ? groups.map(group => `
+                    <tr><td>${escapeReportText(group.familyName)}</td><td>${escapeReportText(group.clientName)}</td><td>${group.projectIds.size}</td>
+                    <td>${formatNumber(group.hh)}</td><td>${formatNumber(group.tons, 2)}</td>
+                    <td>${group.tons > 0 ? formatNumber(group.hh / group.tons, 2) : '—'}</td></tr>
+                `).join('') : '<tr><td colspan="6" style="color:var(--muted);">No hay proyectos para analizar.</td></tr>';
+            }
+            if (projectBody) {
+                projectBody.innerHTML = projectEfficiency.length ? projectEfficiency.map(item => `
+                    <tr><td>${escapeReportText(item.familyName)}</td><td>${escapeReportText(item.clientName)}</td>
+                    <td>${escapeReportText(item.project.otCode)}</td><td>${escapeReportText(item.workName)}</td>
+                    <td>${formatNumber(item.hh)}</td><td>${formatNumber(item.tons, 2)}</td>
+                    <td>${item.hhPerTon !== null ? formatNumber(item.hhPerTon, 2) : '—'}</td></tr>
+                `).join('') : '<tr><td colspan="7" style="color:var(--muted);">No hay proyectos para analizar.</td></tr>';
+            }
+
             const today = new Date().toISOString().split('T')[0];
             const todayEntries = state.timeEntries.filter(e => e.work_date === today);
             document.getElementById("daily-closed").innerHTML = todayEntries.length ? todayEntries.map(e => { const task = state.tasks.find(t => t.id === e.taskId); const worker = state.workers.find(w => w.id === e.workerId); const project = state.projects.find(p => p.id === e.projectId); return `<tr><td>${project?.otCode}</td><td>${task?.code}</td><td>${worker?.name}</td><td>${e.hh}</td></tr>`; }).join('') : `<tr><td colspan="4" style="color:var(--muted);">Sin registros hoy</td></tr>`;
@@ -7321,7 +7798,8 @@
                 closedTaskIds.forEach(id => selectedCreatedPrepTasks.delete(id));
 
                 closeBulkClosePrepModal();
-                renderAll();
+                // MEJORA: Actualización en tiempo real en lugar de recargar toda la página
+                refreshTaskViewsRealtime();
                 alert(`✅ Se cerraron exitosamente ${closedTaskIds.length} tareas de preparación al 100% con sus registros de HH correspondientes.`);
             } catch (err) {
                 alert('Error al cerrar tareas: ' + err.message);
@@ -7603,13 +8081,15 @@
                 return `<div style="background:#f6f7f9;padding:10px;border-radius:6px;margin-bottom:8px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                     <strong>${worker?.name || 'N/A'} (${worker?.role || '-'})</strong>
-                    <span style="font-size:12px;color:var(--muted);">Total: <strong style="color:var(--primary);">${totalHh.toFixed(1)} HH</strong></span>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);">
+                        Total:
+                        <input type="number" step="0.1" min="0" value="${totalHh.toFixed(1)}" data-worker-id="${wId}" class="edit-worker-hh-input" style="width:82px;padding:4px;font-size:12px;">
+                        <strong style="color:var(--primary);">HH</strong>
+                    </label>
                 </div>
                 ${workerEntries.map(te => `
                     <div style="display:flex;gap:8px;align-items:center;font-size:11px;margin-bottom:4px;">
-                        <span style="color:var(--muted);">${te.work_date}</span>
-                        <input type="number" step="0.5" min="0" value="${te.hh}" data-entry-id="${te.id}" class="edit-time-entry-input" style="width:70px;padding:4px;font-size:11px;">
-                        <span style="color:var(--muted);">HH</span>
+                        <span style="color:var(--muted);">${te.work_date} · ${te.hh} HH</span>
                         <button onclick="deleteTimeEntry('${te.id}')" style="padding:2px 6px;font-size:10px;border-color:var(--danger);color:var(--danger);background:transparent;margin-left:auto;">✕</button>
                     </div>
                 `).join('')}
@@ -7675,30 +8155,82 @@
             const selectedDate = form.querySelector('input[name="task-close-date"]')?.value || new Date().toISOString().split('T')[0];
 
             try {
+                const task = state.tasks.find(t => t.id === _editingClosedTaskId);
+                if (!task) throw new Error('No se encontró la tarea que se está editando.');
+
+                const workerHours = Array.from(form.querySelectorAll('.edit-worker-hh-input')).map(input => {
+                    const rawHh = input.value.trim();
+                    const parsedHh = Number(rawHh);
+                    if (!rawHh || !Number.isFinite(parsedHh) || parsedHh < 0) {
+                        throw new Error('Ingresa una cantidad de HH válida para cada trabajador.');
+                    }
+                    return {
+                        workerId: input.dataset.workerId,
+                        targetHh: Math.round(parsedHh * 10) / 10
+                    };
+                });
+
+                const removesExistingHours = workerHours.some(({ workerId, targetHh }) =>
+                    targetHh === 0 && state.timeEntries.some(te => te.taskId === task.id && te.workerId === workerId)
+                );
+                if (removesExistingHours && !confirm('Al guardar, se eliminarán los registros de HH de los trabajadores cuyo total quede en 0. ¿Deseas continuar?')) return;
+
                 // Actualizar instrucciones de la tarea
                 await dbUpdateTask(_editingClosedTaskId, { instructions });
 
-                // Actualizar time entries
-                const inputs = form.querySelectorAll('.edit-time-entry-input');
-                for (const input of inputs) {
-                    const entryId = input.dataset.entryId;
-                    const newHh = parseFloat(input.value) || 0;
+                // Ajustar las HH totales de cada trabajador, manteniendo su distribución entre registros existentes.
+                for (const { workerId, targetHh } of workerHours) {
+                    const entries = state.timeEntries.filter(te => te.taskId === _editingClosedTaskId && te.workerId === workerId);
+                    const currentHh = entries.reduce((sum, entry) => sum + entry.hh, 0);
 
-                    if (newHh > 0) {
-                        await db.from('time_entries').update({ hh: newHh, work_date: selectedDate }).eq('id', entryId);
-
-                        // Actualizar estado local
-                        const entry = state.timeEntries.find(te => te.id === entryId);
-                        if (entry) {
-                            entry.hh = newHh;
-                            entry.work_date = selectedDate;
+                    if (targetHh === 0) {
+                        if (entries.length) {
+                            const { error } = await db.from('time_entries').delete().in('id', entries.map(entry => entry.id));
+                            if (error) throw error;
+                            state.timeEntries = state.timeEntries.filter(te => !entries.some(entry => entry.id === te.id));
                         }
+                        continue;
+                    }
+
+                    if (!entries.length) {
+                        const savedEntry = await dbInsertTimeEntry({
+                            id: crypto.randomUUID(),
+                            taskId: task.id,
+                            workerId,
+                            projectId: task.projectId,
+                            work_date: selectedDate,
+                            hh: targetHh,
+                            is_rework: task.isRework || false
+                        });
+                        state.timeEntries.push(savedEntry);
+                        continue;
+                    }
+
+                    let allocatedHh = 0;
+                    for (let index = 0; index < entries.length; index++) {
+                        const entry = entries[index];
+                        const newHh = index === entries.length - 1
+                            ? Math.round((targetHh - allocatedHh) * 10) / 10
+                            : Math.round((currentHh > 0 ? targetHh * entry.hh / currentHh : targetHh / entries.length) * 10) / 10;
+
+                        if (newHh <= 0) {
+                            const { error } = await db.from('time_entries').delete().eq('id', entry.id);
+                            if (error) throw error;
+                            state.timeEntries = state.timeEntries.filter(te => te.id !== entry.id);
+                            continue;
+                        }
+
+                        const { error } = await db.from('time_entries').update({ hh: newHh, work_date: selectedDate }).eq('id', entry.id);
+                        if (error) throw error;
+
+                        entry.hh = newHh;
+                        entry.work_date = selectedDate;
+                        allocatedHh += newHh;
                     }
                 }
 
                 // Actualizar estado local de la tarea
-                const task = state.tasks.find(t => t.id === _editingClosedTaskId);
-                if (task) task.instructions = instructions;
+                task.instructions = instructions;
 
                 closeEditClosedTaskModal();
                 renderProductivityAnalysis();
@@ -7970,10 +8502,10 @@
                 <td style="font-size:11px;">${workers}</td>
                 <td><strong>${taskHh.toFixed(1)}</strong></td>
                 <td style="font-size:11px;">${lastDate}</td>
-                <td><div style="display:flex;gap:4px;">
+                    <td style="display:flex;gap:4px;">
                     <button onclick="openEditClosedTaskModal('${task.id}')" style="padding:3px 6px;font-size:10px;border-color:var(--info);color:var(--info);background:transparent;" title="Editar">✏️</button>
                     <button onclick="deleteClosedTask('${task.id}')" style="padding:3px 6px;font-size:10px;border-color:var(--danger);color:var(--danger);background:transparent;" title="Eliminar">🗑️</button>
-                </div></td>
+                    </td>
                 </tr>`;
             });
             htmlTasks += `</tbody></table></div>`;
